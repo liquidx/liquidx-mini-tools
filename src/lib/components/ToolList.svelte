@@ -14,7 +14,8 @@
 <ul class="tool-list">
 	{#each tools as tool, i (tool.slug)}
 		<li style:animation-delay="{i * 60}ms">
-			<a href={resolve('/[slug]', { slug: tool.slug })}>{tool.title}</a>
+			<!-- Full page load: a tool may be a standalone document served by a +server.ts route. -->
+			<a href={resolve('/[slug]', { slug: tool.slug })} data-sveltekit-reload>{tool.title}</a>
 			<time datetime={tool.date}>{tool.date}</time>
 		</li>
 	{/each}

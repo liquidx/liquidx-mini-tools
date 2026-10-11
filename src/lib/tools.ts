@@ -12,7 +12,20 @@ export type Tool = {
  * An entry links to /<slug>. Until src/routes/<slug>/ exists, the
  * src/routes/[slug]/ placeholder page is shown instead.
  */
-export const tools: Tool[] = [];
+export const tools: Tool[] = [
+	{
+		slug: 'calendar-clock',
+		title: 'Calendar Clock',
+		date: '2026-10-11',
+		summary: "Ambient full-screen display with this month's calendar beside a large clock."
+	},
+	{
+		slug: 'mosaic',
+		title: '16:9 Mosaic Maker',
+		date: '2026-10-11',
+		summary: 'Arrange images into a grid on a 16:9 sheet and export it as a JPEG or PNG.'
+	}
+];
 
 export function findTool(slug: string): Tool | undefined {
 	return tools.find((t) => t.slug === slug);

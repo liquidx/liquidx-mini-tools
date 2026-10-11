@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimalist Mountain SVG Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Space Grotesk"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace']
+                    },
+                    colors: {
+                        night: '#09090b',
+                        panel: '#121216',
+                        borderSubtle: '#27272a',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for dark UI */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #09090b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+    </style>
+</head>
+<body class="bg-night text-zinc-100 min-h-screen font-sans flex flex-col selection:bg-white selection:text-black antialiased">
+
+    <header class="border-b border-borderSubtle/60 px-6 py-4 flex items-center justify-between backdrop-blur-md bg-night/80 sticky top-0 z-30">
+        <div class="flex items-center space-x-3">
+            <div class="w-7 h-7 bg-white rounded flex items-center justify-center text-black font-black text-xs tracking-tighter">
+                ▲▲▲
+            </div>
+            <div>
+                <h1 class="text-base font-semibold tracking-wide text-white">TriPeak SVG</h1>
+                <p class="text-xs text-zinc-400">Minimalist Equilateral Mountain Generator</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-mono bg-zinc-800 text-zinc-300 border border-zinc-700">
+                1:1 Aspect Ratio
+            </span>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        
+        <!-- Left Column: Interactive Visual Canvas Preview -->
+        <div class="lg:col-span-7 flex flex-col gap-4">
+            <div class="relative w-full aspect-square bg-black border border-borderSubtle rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center p-2 group">
+                <!-- SVG Container -->
+                <div id="svgContainer" class="w-full h-full flex items-center justify-center">
+                    <!-- SVG gets dynamically mounted here -->
+                </div>
+
+                <!-- Subtle Grid Overlay Toggle Indicator -->
+                <div id="baselineHelper" class="pointer-events-none absolute inset-0 hidden">
+                    <div class="absolute w-full border-t border-dashed border-red-500/60" style="top: 75%;"></div>
+                    <span class="absolute right-3 text-[10px] font-mono text-red-400 bg-black/80 px-1.5 py-0.5 rounded border border-red-900/50" style="top: calc(75% + 4px);">
+                        Baseline y = 600 (75% / 1/4 from bottom)
+                    </span>
+                </div>
+
+                <!-- Floating Seed Badge -->
+                <div class="absolute bottom-4 left-4 pointer-events-none">
+                    <span id="seedDisplay" class="text-[11px] font-mono px-2.5 py-1 bg-zinc-900/90 text-zinc-400 rounded-lg border border-zinc-800/80 backdrop-blur-sm">
+                        Seed: --
+                    </span>
+                </div>
+            </div>
+
+            <!-- Action Bar Under Canvas -->
+            <div class="flex flex-wrap items-center justify-between gap-3 p-3 bg-panel border border-borderSubtle rounded-xl">
+                <button id="btnRandomize" class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white text-black hover:bg-zinc-200 active:scale-95 rounded-lg font-medium text-sm transition-all shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                    Randomize Positions
+                </button>
+
+                <div class="flex items-center gap-2 w-full sm:w-auto">
+                    <button id="btnCopySvg" class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-zinc-100 rounded-lg font-medium text-sm transition-all border border-zinc-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        <span>Copy SVG</span>
+                    </button>
+                    <button id="btnDownloadSvg" class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-zinc-100 rounded-lg font-medium text-sm transition-all border border-zinc-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        <span>Download</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Settings & Specifications -->
+        <div class="lg:col-span-5 flex flex-col gap-6">
+            
+            <!-- Controls Container -->
+            <div class="bg-panel border border-borderSubtle rounded-2xl p-6 shadow-xl space-y-6">
+                <div class="border-b border-borderSubtle pb-4">
+                    <h2 class="text-base font-semibold text-white">Mountain & Geometry Settings</h2>
+                    <p class="text-xs text-zinc-400 mt-0.5">Customizable parameters while strictly adhering to geometry requirements.</p>
+                </div>
+
+                <!-- Sizes Control -->
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-xs font-medium mb-1.5">
+                            <span class="text-zinc-300">Large Mountain Base Width</span>
+                            <span id="largeVal" class="font-mono text-zinc-400">440 px</span>
+                        </div>
+                        <input id="largeSizeInput" type="range" min="320" max="620" value="440" class="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-white">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs font-medium mb-1.5">
+                            <span class="text-zinc-300">Medium Mountain Base Width</span>
+                            <span id="mediumVal" class="font-mono text-zinc-400">300 px</span>
+                        </div>
+                        <input id="mediumSizeInput" type="range" min="200" max="420" value="300" class="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-white">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-xs font-medium mb-1.5">
+                            <span class="text-zinc-300">Small Mountain Base Width</span>
+                            <span id="smallVal" class="font-mono text-zinc-400">170 px</span>
+                        </div>
+                        <input id="smallSizeInput" type="range" min="90" max="250" value="170" class="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-white">
+                    </div>
+                </div>
+
+                <!-- Stroke & Spacing Controls -->
+                <div class="pt-2 border-t border-borderSubtle/60 space-y-4">
+                    <div>
+                        <div class="flex justify-between text-xs font-medium mb-1.5">
+                            <span class="text-zinc-300">Black Border Stroke Width</span>
+                            <span id="strokeVal" class="font-mono text-zinc-400">4 px</span>
+                        </div>
+                        <input id="strokeWidthInput" type="range" min="1" max="16" value="4" class="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-white">
+                    </div>
+
+                    <!-- Enforced Layer Depth Notice -->
+                    <div class="p-3 bg-zinc-900/80 border border-zinc-800 rounded-xl space-y-1">
+                        <div class="flex items-center justify-between text-xs font-medium text-zinc-300">
+                            <span>Layer Depth (Front to Back)</span>
+                            <span class="text-emerald-400 font-mono text-[10px]">LOCKED</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[11px] font-mono text-zinc-400 pt-1 border-t border-zinc-800/60">
+                            <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-white inline-block"></span>Front: Small</span>
+                            <span>&rarr;</span>
+                            <span class="text-zinc-400">Mid: Medium</span>
+                            <span>&rarr;</span>
+                            <span class="flex items-center gap-1.5">Back: Large<span class="w-2 h-2 rounded-full bg-zinc-600 inline-block"></span></span>
+                        </div>
+                    </div>
+
+                    <!-- Alignment / Guide Overlay Toggle -->
+                    <div class="flex items-center justify-between pt-1">
+                        <div>
+                            <span class="text-xs font-medium text-zinc-300">Show 1/4 Baseline Guide</span>
+                            <p class="text-[11px] text-zinc-500">Visual proof of y = 600 baseline</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="toggleGuide" class="sr-only peer">
+                            <div class="w-9 h-5 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-zinc-200 peer-checked:after:bg-black"></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mathematical Specs Card -->
+            <div class="bg-panel border border-borderSubtle rounded-2xl p-5 text-xs space-y-3 font-mono text-zinc-400">
+                <div class="flex items-center justify-between text-zinc-200 font-sans font-semibold">
+                    <span>Mathematical Constraints</span>
+                    <span class="text-emerald-400 text-[11px] font-mono">VERIFIED</span>
+                </div>
+                <ul class="space-y-1.5 text-[11px] leading-relaxed list-disc list-inside text-zinc-400">
+                    <li><strong class="text-zinc-300">ViewBox:</strong> 800 × 800 (1:1 aspect ratio)</li>
+                    <li><strong class="text-zinc-300">Background:</strong> Solid #000000</li>
+                    <li><strong class="text-zinc-300">Baseline:</strong> y = 600 px (exact 75% down, 1/4 from bottom)</li>
+                    <li><strong class="text-zinc-300">Equilateral Height:</strong> \( h = \frac{\sqrt{3}}{2} \times \text{base} \)</li>
+                    <li><strong class="text-zinc-300">Strict Depth:</strong> Large (back) &rarr; Medium (mid) &rarr; Small (front)</li>
+                    <li><strong class="text-zinc-300">Coloring:</strong> Pure white fill (#FFFFFF) with crisp black border</li>
+                </ul>
+            </div>
+
+            <!-- Code Preview Block -->
+            <div class="bg-panel border border-borderSubtle rounded-2xl p-4 flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-medium text-zinc-400 uppercase tracking-wider">Raw SVG Output</span>
+                    <span class="text-[10px] font-mono text-zinc-500">Auto-updated</span>
+                </div>
+                <textarea id="svgCodePreview" readonly class="w-full h-32 bg-black/70 border border-zinc-800 rounded-lg p-2.5 text-[11px] font-mono text-zinc-400 resize-none focus:outline-none select-all"></textarea>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Notification Toast Modal -->
+    <div id="toast" class="fixed bottom-6 right-6 translate-y-16 opacity-0 transition-all duration-300 bg-white text-black px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2.5 font-medium text-xs z-50 pointer-events-none">
+        <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        <span id="toastMessage">Copied to clipboard!</span>
+    </div>
+
+    <script>
+        // Mathematical Constants & Configuration
+        const VIEWBOX_SIZE = 800;
+        const BASELINE_Y = VIEWBOX_SIZE * 0.75; // 600px - 1/4 from bottom
+        const SQRT3_OVER_2 = Math.sqrt(3) / 2; // Ratio of equilateral triangle height to base
+
+        // State Management
+        const state = {
+            largeBase: 440,
+            mediumBase: 300,
+            smallBase: 170,
+            strokeWidth: 4,
+            mountains: {
+                large: { id: 'large', label: 'Large (Furthest Back)', base: 440, cx: 380 },
+                medium: { id: 'medium', label: 'Medium (Middle Layer)', base: 300, cx: 230 },
+                small: { id: 'small', label: 'Small (Front-most)', base: 170, cx: 560 }
+            },
+            seed: Math.floor(Math.random() * 90000) + 10000
+        };
+
+        // DOM elements
+        const svgContainer = document.getElementById('svgContainer');
+        const svgCodePreview = document.getElementById('svgCodePreview');
+        const seedDisplay = document.getElementById('seedDisplay');
+        const baselineHelper = document.getElementById('baselineHelper');
+
+        // Inputs
+        const largeInput = document.getElementById('largeSizeInput');
+        const mediumInput = document.getElementById('mediumSizeInput');
+        const smallInput = document.getElementById('smallSizeInput');
+        const strokeInput = document.getElementById('strokeWidthInput');
+        const toggleGuide = document.getElementById('toggleGuide');
+
+        // Value labels
+        const largeVal = document.getElementById('largeVal');
+        const mediumVal = document.getElementById('mediumVal');
+        const smallVal = document.getElementById('smallVal');
+        const strokeVal = document.getElementById('strokeVal');
+
+        // Buttons
+        const btnRandomize = document.getElementById('btnRandomize');
+        const btnCopySvg = document.getElementById('btnCopySvg');
+        const btnDownloadSvg = document.getElementById('btnDownloadSvg');
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toastMessage');
+
+        /**
+         * Calculates coordinates for an equilateral triangle resting on y = BASELINE_Y.
+         * Base length = `base`. Center x = `cx`.
+         * Left vertex: (cx - base/2, BASELINE_Y)
+         * Right vertex: (cx + base/2, BASELINE_Y)
+         * Apex vertex: (cx, BASELINE_Y - base * sqrt(3)/2)
+         */
+        function calculateEquilateralPoints(cx, base) {
+            const halfBase = base / 2;
+            const height = base * SQRT3_OVER_2;
+            const x1 = cx - halfBase;
+            const y1 = BASELINE_Y;
+            const x2 = cx + halfBase;
+            const y2 = BASELINE_Y;
+            const x3 = cx;
+            const y3 = BASELINE_Y - height;
+
+            return {
+                points: `${x1.toFixed(2)},${y1.toFixed(2)} ${x2.toFixed(2)},${y2.toFixed(2)} ${x3.toFixed(2)},${y3.toFixed(2)}`,
+                left: x1,
+                right: x2,
+                apexX: x3,
+                apexY: y3
+            };
+        }
+
+        /**
+         * Generates pleasant horizontal arrangement along X axis.
+         */
+        function randomizePositions() {
+            state.seed = Math.floor(Math.random() * 90000) + 10000;
+            seedDisplay.textContent = `Seed: #${state.seed}`;
+
+            const margin = 40;
+            const usableWidth = VIEWBOX_SIZE - (margin * 2);
+
+            let centers = [];
+            let valid = false;
+            let attempts = 0;
+
+            while (!valid && attempts < 300) {
+                attempts++;
+                centers = [
+                    margin + (state.largeBase / 2) + Math.random() * Math.max(10, usableWidth - state.largeBase),
+                    margin + (state.mediumBase / 2) + Math.random() * Math.max(10, usableWidth - state.mediumBase),
+                    margin + (state.smallBase / 2) + Math.random() * Math.max(10, usableWidth - state.smallBase)
+                ];
+
+                const dist01 = Math.abs(centers[0] - centers[1]);
+                const dist12 = Math.abs(centers[1] - centers[2]);
+                const dist02 = Math.abs(centers[0] - centers[2]);
+
+                if (dist01 > 50 && dist12 > 50 && dist02 > 50) {
+                    valid = true;
+                }
+            }
+
+            state.mountains.large.cx = centers[0];
+            state.mountains.medium.cx = centers[1];
+            state.mountains.small.cx = centers[2];
+
+            renderSVG();
+        }
+
+        /**
+         * Builds clean SVG string with strict layering:
+         * 1. Large Mountain (Furthest back - drawn first)
+         * 2. Medium Mountain (Middle - drawn second)
+         * 3. Small Mountain (Front-most - drawn last so it always overlaps others)
+         */
+        function buildSVGString() {
+            const strictLayerOrder = [
+                state.mountains.large,
+                state.mountains.medium,
+                state.mountains.small
+            ];
+
+            const polygonTags = strictLayerOrder.map(m => {
+                const geom = calculateEquilateralPoints(m.cx, m.base);
+                return `  <!-- ${m.label} (base: ${m.base}px) -->\n  <polygon points="${geom.points}" fill="#ffffff" stroke="#000000" stroke-width="${state.strokeWidth}" stroke-linejoin="miter" stroke-miterlimit="4" />`;
+            }).join('\n');
+
+            return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${VIEWBOX_SIZE} ${VIEWBOX_SIZE}" width="100%" height="100%">
+  <!-- Solid Black Background -->
+  <rect width="${VIEWBOX_SIZE}" height="${VIEWBOX_SIZE}" fill="#000000" />
+
+  <!-- Equilateral Mountains strictly ordered: Large (Back) -> Medium (Mid) -> Small (Front) -->
+  <!-- Aligned at baseline y=${BASELINE_Y} (1/4 of total height from the bottom) -->
+${polygonTags}
+</svg>`;
+        }
+
+        /**
+         * Renders SVG to DOM and updates code textarea
+         */
+        function renderSVG() {
+            const svgMarkup = buildSVGString();
+            svgContainer.innerHTML = svgMarkup;
+            svgCodePreview.value = svgMarkup;
+        }
+
+        function showToast(msg) {
+            toastMessage.textContent = msg;
+            toast.classList.remove('translate-y-16', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-16', 'opacity-0');
+            }, 2300);
+        }
+
+        // Copy SVG Code
+        btnCopySvg.addEventListener('click', () => {
+            const svgMarkup = buildSVGString();
+            const textarea = document.createElement('textarea');
+            textarea.value = svgMarkup;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                showToast('SVG code copied to clipboard');
+            } catch (err) {
+                showToast('Failed to copy');
+            }
+            document.body.removeChild(textarea);
+        });
+
+        // Download SVG File
+        btnDownloadSvg.addEventListener('click', () => {
+            const svgMarkup = buildSVGString();
+            const blob = new Blob([svgMarkup], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = `mountains-${state.seed}.svg`;
+            document.body.appendChild(anchor);
+            anchor.click();
+            document.body.removeChild(anchor);
+            URL.revokeObjectURL(url);
+            showToast('SVG file downloaded');
+        });
+
+        // Randomize Action
+        btnRandomize.addEventListener('click', () => {
+            randomizePositions();
+        });
+
+        // Dynamic size sliders
+        largeInput.addEventListener('input', (e) => {
+            state.largeBase = parseFloat(e.target.value);
+            state.mountains.large.base = state.largeBase;
+            largeVal.textContent = `${state.largeBase} px`;
+            renderSVG();
+        });
+
+        mediumInput.addEventListener('input', (e) => {
+            state.mediumBase = parseFloat(e.target.value);
+            state.mountains.medium.base = state.mediumBase;
+            mediumVal.textContent = `${state.mediumBase} px`;
+            renderSVG();
+        });
+
+        smallInput.addEventListener('input', (e) => {
+            state.smallBase = parseFloat(e.target.value);
+            state.mountains.small.base = state.smallBase;
+            smallVal.textContent = `${state.smallBase} px`;
+            renderSVG();
+        });
+
+        strokeInput.addEventListener('input', (e) => {
+            state.strokeWidth = parseFloat(e.target.value);
+            strokeVal.textContent = `${state.strokeWidth} px`;
+            renderSVG();
+        });
+
+        toggleGuide.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                baselineHelper.classList.remove('hidden');
+            } else {
+                baselineHelper.classList.add('hidden');
+            }
+        });
+
+        // Initial setup
+        window.addEventListener('load', () => {
+            randomizePositions();
+        });
+    </script>
+</body>
+</html>

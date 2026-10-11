@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f7f6f2" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>Calendar Clock</title>
+    <script>
+      // Set the theme before first paint so /calendar-clock/dark doesn't flash light.
+      if (/\/dark\/?$/.test(location.pathname)) {
+        document.documentElement.dataset.theme = "dark";
+        document.querySelector('meta[name="theme-color"]').content = "#0b0b0d";
+      }
+    </script>
+    <style>
+      :root {
+        --bg: #f7f6f2;
+        --fg: #1c1c1e;
+        --muted: #86857f;
+        --faint: #cfcdc6;
+        --accent: #e8720c;
+        --accent-fg: #ffffff;
+        color-scheme: light;
+      }
+
+      /* Dark theme, enabled by visiting /calendar-clock/dark. */
+      :root[data-theme="dark"] {
+        --bg: #0b0b0d;
+        --fg: #ecebe6;
+        --muted: #7d7c78;
+        --faint: #3a3a3e;
+        --accent: #ff9f43;
+        --accent-fg: #0b0b0d;
+        color-scheme: dark;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        height: 100%;
+        overflow: hidden;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+      }
+
+      .ambient {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        height: 100vh;
+        height: 100dvh;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+          env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+
+      /* Portrait: stack the calendar above the clock. */
+      @media (orientation: portrait) {
+        .ambient {
+          grid-template-columns: 1fr;
+          grid-template-rows: 1fr 1fr;
+        }
+      }
+
+      .pane {
+        container-type: size;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* ---------- Calendar ---------- */
+
+      .calendar {
+        --pad: min(6cqw, 6cqh);
+        width: 100%;
+        height: 100%;
+        padding: var(--pad);
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        /* header + weekday row + 6 week rows */
+        grid-template-rows: 1.5fr 0.8fr repeat(6, 1fr);
+        align-items: center;
+        justify-items: center;
+        font-variant-numeric: tabular-nums;
+        /* each cell is ~1/7 wide and ~1/9 tall */
+        font-size: min(5.5cqw, 7cqh);
+      }
+
+      /* Keep the calendar from stretching too wide on big landscape panes. */
+      @container (min-aspect-ratio: 5/4) {
+        .calendar {
+          width: min(100%, 125cqh);
+        }
+      }
+
+      .cal-title {
+        grid-column: 1 / -1;
+        justify-self: start;
+        align-self: center;
+        padding-left: 0.35em;
+        font-size: 1.25em;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+
+      .cal-title .year {
+        color: var(--muted);
+        font-weight: 400;
+        margin-left: 0.3em;
+      }
+
+      .cal-dow {
+        color: var(--muted);
+        font-size: 0.7em;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .cal-day {
+        display: grid;
+        place-items: center;
+        width: 1.9em;
+        height: 1.9em;
+        border-radius: 50%;
+      }
+
+      .cal-day.weekend {
+        color: var(--muted);
+      }
+
+      .cal-day.other {
+        color: var(--faint);
+      }
+
+      .cal-day.today {
+        background: var(--accent);
+        color: var(--accent-fg);
+        font-weight: 700;
+      }
+
+      /* ---------- Clock ---------- */
+
+      .clock {
+        display: flex;
+        align-items: baseline;
+        font-variant-numeric: tabular-nums;
+        font-weight: 300;
+        line-height: 1;
+        letter-spacing: -0.02em;
+        /* "00:00" is roughly 2.8em wide in tabular digits */
+        font-size: min(30cqw, 60cqh);
+      }
+
+      .clock .colon {
+        margin: 0 0.02em;
+        position: relative;
+        top: -0.06em;
+        color: var(--muted);
+      }
+
+      .clock .period {
+        margin-left: 0.15em;
+        font-size: 0.22em;
+        font-weight: 500;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+
+      .clock.has-period {
+        font-size: min(25cqw, 55cqh);
+      }
+
+      /* Swapped via Up/Down arrow keys: clock first, calendar second. */
+      .ambient.swapped .clock-pane {
+        order: -1;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="ambient">
+      <section class="pane calendar-pane">
+        <div class="calendar" id="calendar"></div>
+      </section>
+      <section class="pane clock-pane">
+        <time class="clock" id="clock"></time>
+      </section>
+    </main>
+    <script type="module">
+      const calendarEl = document.getElementById("calendar");
+      const clockEl = document.getElementById("clock");
+
+      const locale = navigator.language || "en-US";
+
+      function firstDayOfWeek() {
+        // Intl.Locale weekInfo returns 1 (Mon) .. 7 (Sun); convert to JS 0 (Sun) .. 6 (Sat).
+        try {
+          const loc = new Intl.Locale(locale);
+          const info = loc.getWeekInfo?.() ?? loc.weekInfo;
+          if (info?.firstDay) return info.firstDay % 7;
+        } catch {}
+        return 0;
+      }
+
+      function weekendDays() {
+        try {
+          const loc = new Intl.Locale(locale);
+          const info = loc.getWeekInfo?.() ?? loc.weekInfo;
+          if (info?.weekend) return info.weekend.map((d) => d % 7);
+        } catch {}
+        return [0, 6];
+      }
+
+      const weekStart = firstDayOfWeek();
+      const weekend = weekendDays();
+
+      function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text != null) node.textContent = text;
+        return node;
+      }
+
+      function renderCalendar(now) {
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        const today = now.getDate();
+
+        const frag = document.createDocumentFragment();
+
+        const title = el("div", "cal-title");
+        title.append(
+          new Intl.DateTimeFormat(locale, { month: "long" }).format(now),
+          el("span", "year", String(year)),
+        );
+        frag.append(title);
+
+        const dowFmt = new Intl.DateTimeFormat(locale, { weekday: "narrow" });
+        // 2023-01-01 was a Sunday.
+        for (let i = 0; i < 7; i++) {
+          const dow = (weekStart + i) % 7;
+          frag.append(el("div", "cal-dow", dowFmt.format(new Date(2023, 0, 1 + dow))));
+        }
+
+        const first = new Date(year, month, 1);
+        const offset = (first.getDay() - weekStart + 7) % 7;
+        // Always render 6 weeks so the layout never jumps between months.
+        for (let i = 0; i < 42; i++) {
+          const date = new Date(year, month, 1 - offset + i);
+          const cell = el("div", "cal-day", String(date.getDate()));
+          if (date.getMonth() !== month) cell.classList.add("other");
+          else if (date.getDate() === today) cell.classList.add("today");
+          else if (weekend.includes(date.getDay())) cell.classList.add("weekend");
+          frag.append(cell);
+        }
+
+        calendarEl.replaceChildren(frag);
+      }
+
+      const timeFmt = new Intl.DateTimeFormat(locale, { hour: "numeric", minute: "2-digit" });
+
+      function renderClock(now) {
+        const parts = timeFmt.formatToParts(now);
+        const get = (type) => parts.find((p) => p.type === type)?.value ?? "";
+        const hour = get("hour");
+        const minute = get("minute");
+        const period = get("dayPeriod");
+
+        const frag = document.createDocumentFragment();
+        frag.append(hour, el("span", "colon", ":"), minute);
+        if (period) frag.append(el("span", "period", period));
+        clockEl.classList.toggle("has-period", !!period);
+        clockEl.replaceChildren(frag);
+        clockEl.dateTime = now.toISOString();
+      }
+
+      let lastDay = null;
+
+      function render() {
+        const now = new Date();
+        renderClock(now);
+        const dayKey = now.toDateString();
+        if (dayKey !== lastDay) {
+          lastDay = dayKey;
+          renderCalendar(now);
+        }
+        return now;
+      }
+
+      function tick() {
+        const now = render();
+        // Schedule the next update just after the start of the next minute.
+        setTimeout(tick, 60_000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 50);
+      }
+
+      tick();
+
+      // Timers can be throttled while hidden; refresh immediately when visible again.
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) render();
+      });
+
+      // Up/Down arrow keys swap the order of the calendar and clock.
+      const ambientEl = document.querySelector(".ambient");
+      const SWAP_KEY = "ambient:swapped";
+
+      function setSwapped(swapped) {
+        ambientEl.classList.toggle("swapped", swapped);
+        try {
+          localStorage.setItem(SWAP_KEY, swapped ? "1" : "0");
+        } catch {}
+      }
+
+      try {
+        ambientEl.classList.toggle("swapped", localStorage.getItem(SWAP_KEY) === "1");
+      } catch {}
+
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          setSwapped(!ambientEl.classList.contains("swapped"));
+        }
+      });
+    </script>
+  </body>
+</html>

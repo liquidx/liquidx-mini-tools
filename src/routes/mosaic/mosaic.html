@@ -1,0 +1,781 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>16:9 Mosaic Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one 16:9 sheet centred on a black room, a single compact control strip beneath it. Darkroom safelight amber as the only accent. */
+:root {
+  --room: #070707;
+  --panel: #141414;
+  --line: #2a2a2a;
+  --text: #e8e6e3;
+  --muted: #8d8a85;
+  --accent: #f0a93b;
+  --danger: #e5634d;
+  --font-ui: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--room);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  padding-inline: 16px;
+  box-sizing: border-box;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+.room {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding-block: 20px 14px;
+}
+.stage {
+  position: relative;
+  max-width: 100%;
+  box-shadow: 0 0 0 1px #000, 0 20px 60px rgba(0,0,0,.6);
+  touch-action: none;
+}
+.stage canvas { display: block; width: 100%; height: 100%; cursor: default; }
+.stage canvas.grab { cursor: grab; }
+.stage canvas.grabbing { cursor: grabbing; }
+.stage canvas.add { cursor: copy; }
+
+.cellbar {
+  position: absolute;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(10,10,10,.82);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 7px;
+  transform: translate(-100%, 0);
+  z-index: 2;
+}
+.cellbar button {
+  width: 26px; height: 26px;
+  border: 0; border-radius: 5px;
+  background: transparent; color: var(--text);
+  display: grid; place-items: center;
+  cursor: pointer; padding: 0;
+}
+.cellbar button:hover { background: rgba(255,255,255,.1); }
+.cellbar .grip { cursor: grab; touch-action: none; }
+.cellbar .grip:active { cursor: grabbing; }
+.cellbar .div { width: 1px; margin: 4px 2px; background: rgba(255,255,255,.12); }
+.cellbar.moving { opacity: .25; pointer-events: none; }
+.ghost {
+  position: fixed; z-index: 20; pointer-events: none;
+  width: 132px; aspect-ratio: 16 / 9; max-width: 100%;
+  background-size: cover; background-position: center;
+  border: 2px solid var(--accent); border-radius: 4px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.6);
+  transform: translate(-50%, -50%) rotate(-2deg);
+  opacity: .92;
+}
+body.moving, body.moving * { cursor: grabbing !important; }
+.cellbar button.del:hover { color: var(--danger); }
+.cellbar svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 18px;
+  padding-block: 4px 18px;
+}
+.group { display: flex; align-items: center; gap: 8px; }
+.label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.stepper {
+  display: flex; align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.stepper button {
+  width: 28px; height: 28px;
+  border: 0; background: transparent; color: var(--text);
+  font-size: 15px; cursor: pointer; border-radius: 6px;
+}
+.stepper button:hover { background: rgba(255,255,255,.07); }
+.stepper output {
+  min-width: 20px; text-align: center;
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+}
+.sep { width: 1px; height: 22px; background: var(--line); }
+input[type=range] { width: 92px; accent-color: var(--accent); }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--muted); min-width: 26px; }
+input[type=color] {
+  width: 28px; height: 28px; padding: 0; border: 1px solid var(--line);
+  border-radius: 7px; background: var(--panel); cursor: pointer;
+}
+input[type=color]::-webkit-color-swatch-wrapper { padding: 4px; }
+input[type=color]::-webkit-color-swatch { border: 0; border-radius: 4px; }
+select {
+  height: 30px; background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 7px; padding: 0 8px;
+  font: 12px var(--font-num);
+}
+.seg { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 2px; }
+.seg button {
+  border: 0; background: transparent; color: var(--muted);
+  font: 500 12px var(--font-ui); padding: 5px 9px; border-radius: 5px; cursor: pointer;
+}
+.seg button[aria-pressed=true] { background: #2b2b2b; color: var(--text); }
+.btn {
+  height: 30px; padding: 0 12px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  font: 500 12.5px var(--font-ui); cursor: pointer;
+}
+.btn:hover { border-color: #3a3a3a; }
+.btn.warn { color: var(--danger); border-color: rgba(229,99,77,.5); }
+.btn.primary {
+  background: var(--accent); border-color: var(--accent); color: #1a1205; font-weight: 600;
+}
+.btn.primary:hover { filter: brightness(1.06); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { width: 100%; text-align: center; color: var(--muted); font-size: 11.5px; }
+.hint kbd { font-family: var(--font-num); font-size: 10.5px; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
+  background: #1d1d1d; border: 1px solid var(--line); color: var(--text);
+  padding: 8px 14px; border-radius: 8px; font-size: 12.5px;
+  opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 5;
+}
+.toast.show { opacity: 1; }
+
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.88);
+  display: grid; place-items: center; z-index: 10; padding: 24px;
+}
+.overlay figure { margin: 0; display: grid; gap: 12px; justify-items: center; max-width: 100%; }
+.overlay img { max-height: 75vh; box-shadow: 0 0 0 1px #333; }
+.overlay figcaption { color: var(--muted); text-align: center; }
+
+@media (max-width: 640px) {
+  .sep { display: none; }
+  .controls { gap: 10px 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+
+<main class="room" id="room">
+  <div class="stage" id="stage">
+    <canvas id="view" aria-label="Mosaic canvas"></canvas>
+    <div class="cellbar" id="cellbar" hidden>
+      <button type="button" data-act="move" class="grip" title="Drag to another slot"><svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg></button>
+      <span class="div"></span>
+      <button type="button" data-act="out" title="Zoom out"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-4-4"/></svg></button>
+      <button type="button" data-act="in" title="Zoom in"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M11 8v6M20 20l-4-4"/></svg></button>
+      <button type="button" data-act="fit" title="Reset to fill"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+      <button type="button" data-act="replace" title="Replace image"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/></svg></button>
+      <button type="button" data-act="remove" class="del" title="Remove image"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </div>
+</main>
+
+<section class="controls" aria-label="Mosaic settings">
+  <div class="group">
+    <span class="label">Cols</span>
+    <div class="stepper"><button type="button" id="colsDown" aria-label="Fewer columns">−</button><output id="colsOut">3</output><button type="button" id="colsUp" aria-label="More columns">+</button></div>
+  </div>
+  <div class="group">
+    <span class="label">Rows</span>
+    <div class="stepper"><button type="button" id="rowsDown" aria-label="Fewer rows">−</button><output id="rowsOut">2</output><button type="button" id="rowsUp" aria-label="More rows">+</button></div>
+  </div>
+  <div class="sep"></div>
+  <div class="group">
+    <label class="label" for="gap">Gap</label>
+    <input type="range" id="gap" min="0" max="60" step="1" value="0">
+    <span class="num" id="gapOut">0</span>
+  </div>
+  <div class="group">
+    <label class="label" for="fill">Fill</label>
+    <input type="color" id="fill" value="#3a3a3a">
+  </div>
+  <div class="sep"></div>
+  <div class="group">
+    <select id="size" aria-label="Output size">
+      <option value="1280">1280×720</option>
+      <option value="1920" selected>1920×1080</option>
+      <option value="2560">2560×1440</option>
+      <option value="3840">3840×2160</option>
+    </select>
+    <div class="seg" role="group" aria-label="Format">
+      <button type="button" id="fmtJpg" aria-pressed="true">JPEG</button>
+      <button type="button" id="fmtPng" aria-pressed="false">PNG</button>
+    </div>
+  </div>
+  <div class="group">
+    <button type="button" class="btn" id="clear">Clear</button>
+    <button type="button" class="btn primary" id="export">Export</button>
+  </div>
+  <p class="hint" id="hint">Click, drop or <kbd>⌘V</kbd> paste into a slot · drag to reposition · scroll or pinch to zoom · <kbd>⌥</kbd>-drag or use the move handle to swap slots</p>
+</section>
+
+<input type="file" id="picker" accept="image/*" multiple hidden>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+  const MAX = 10;
+  const state = {
+    cols: 3, rows: 2, gap: 0, fill: '#3a3a3a',
+    width: 1920, fmt: 'jpeg',
+    cells: [],          // {img, url, scale, ox, oy} or null, row-major
+    selected: -1, hover: -1, dragOver: -1, moveFrom: -1,
+  };
+
+  const $ = id => document.getElementById(id);
+  const room = $('room'), stage = $('stage'), canvas = $('view'), ctx = canvas.getContext('2d');
+  const cellbar = $('cellbar'), picker = $('picker'), toastEl = $('toast');
+  let cssW = 0, cssH = 0, dpr = 1;
+  let pickTarget = 0;
+
+  const count = () => state.cols * state.rows;
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+  if (!isMac) $('hint').innerHTML = $('hint').innerHTML.replace('⌘V', 'Ctrl+V').replace('⌥', 'Alt');
+
+  /* ---------- geometry ---------- */
+  function layout(W, H) {
+    const g = state.gap * W / 1920;
+    const cw = (W - g * (state.cols - 1)) / state.cols;
+    const ch = (H - g * (state.rows - 1)) / state.rows;
+    const rects = [];
+    for (let r = 0; r < state.rows; r++)
+      for (let c = 0; c < state.cols; c++)
+        rects.push({ x: c * (cw + g), y: r * (ch + g), w: cw, h: ch });
+    return rects;
+  }
+  function dims(cell, r) {
+    const iw = cell.img.naturalWidth, ih = cell.img.naturalHeight;
+    const s = Math.max(r.w / iw, r.h / ih) * cell.scale;
+    return { dw: iw * s, dh: ih * s };
+  }
+  function clampCell(cell, r) {
+    const { dw, dh } = dims(cell, r);
+    const mx = Math.abs(dw - r.w) / 2 / r.w, my = Math.abs(dh - r.h) / 2 / r.h;
+    cell.ox = Math.min(mx, Math.max(-mx, cell.ox));
+    cell.oy = Math.min(my, Math.max(-my, cell.oy));
+  }
+
+  /* ---------- drawing (shared by preview + export) ---------- */
+  function draw(c, W, H, ui) {
+    c.fillStyle = state.fill;
+    c.fillRect(0, 0, W, H);
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = 'high';
+    const rects = layout(W, H);
+    rects.forEach((r, i) => {
+      const cell = state.cells[i];
+      if (cell) {
+        const { dw, dh } = dims(cell, r);
+        const x = r.x + r.w / 2 - dw / 2 + cell.ox * r.w;
+        const y = r.y + r.h / 2 - dh / 2 + cell.oy * r.h;
+        c.save();
+        c.beginPath(); c.rect(r.x, r.y, r.w, r.h); c.clip();
+        c.drawImage(cell.img, x, y, dw, dh);
+        c.restore();
+      } else if (ui) {
+        drawEmpty(c, r, i);
+      }
+    });
+    if (!ui) return;
+    // guides
+    c.save();
+    c.lineWidth = 1;
+    c.strokeStyle = 'rgba(255,255,255,0.22)';
+    c.setLineDash([4, 4]);
+    rects.forEach(r => c.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1));
+    c.setLineDash([]);
+    const accent = '#f0a93b';
+    if (state.moveFrom >= 0 && rects[state.moveFrom]) {
+      const r = rects[state.moveFrom];
+      c.fillStyle = 'rgba(0,0,0,0.55)'; c.fillRect(r.x, r.y, r.w, r.h);
+    }
+    if (state.dragOver >= 0 && rects[state.dragOver]) {
+      const r = rects[state.dragOver];
+      c.fillStyle = 'rgba(240,169,59,0.16)'; c.fillRect(r.x, r.y, r.w, r.h);
+      c.strokeStyle = accent; c.lineWidth = 2; c.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+    } else if (state.selected >= 0 && rects[state.selected]) {
+      const r = rects[state.selected];
+      c.strokeStyle = accent; c.lineWidth = 2; c.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+    }
+    if (state.hover >= 0 && state.hover !== state.selected && state.dragOver < 0 && rects[state.hover]) {
+      const r = rects[state.hover];
+      c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = 1; c.strokeRect(r.x + .5, r.y + .5, r.w - 1, r.h - 1);
+    }
+    c.restore();
+  }
+  function drawEmpty(c, r, i) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    const s = Math.min(r.w, r.h);
+    c.save();
+    c.fillStyle = state.hover === i ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)';
+    c.fillRect(r.x, r.y, r.w, r.h);
+    // frame number, contact-sheet style
+    const fs = Math.max(9, Math.min(12, s * 0.08));
+    c.font = `500 ${fs}px "JetBrains Mono", monospace`;
+    c.fillStyle = 'rgba(255,255,255,0.35)';
+    c.textBaseline = 'top';
+    c.fillText(String(i + 1).padStart(2, '0'), r.x + 8, r.y + 7);
+    // plus mark
+    const p = Math.max(6, Math.min(14, s * 0.09));
+    c.strokeStyle = state.hover === i ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.4)';
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(cx - p, cy); c.lineTo(cx + p, cy);
+    c.moveTo(cx, cy - p); c.lineTo(cx, cy + p);
+    c.stroke();
+    if (s > 90) {
+      c.font = `500 11px "Instrument Sans", system-ui, sans-serif`;
+      c.textAlign = 'center';
+      c.fillStyle = 'rgba(255,255,255,0.45)';
+      c.fillText('Drop · paste · click', cx, cy + p + 10);
+    }
+    c.restore();
+  }
+
+  function render() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw(ctx, cssW, cssH, true);
+    placeCellbar();
+  }
+
+  /* ---------- sizing ---------- */
+  function fit() {
+    const cs = getComputedStyle(room);
+    const aw = room.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const ah = room.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    let w = Math.min(aw, ah * 16 / 9);
+    w = Math.max(120, Math.floor(w));
+    cssW = w; cssH = Math.round(w * 9 / 16);
+    stage.style.width = cssW + 'px';
+    stage.style.height = cssH + 'px';
+    dpr = Math.min(3, window.devicePixelRatio || 1);
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    render();
+  }
+  new ResizeObserver(fit).observe(room);
+
+  /* ---------- hit testing ---------- */
+  function pointFromEvent(e) {
+    const b = canvas.getBoundingClientRect();
+    return { x: (e.clientX - b.left) * cssW / b.width, y: (e.clientY - b.top) * cssH / b.height };
+  }
+  function cellAt(p) {
+    const rects = layout(cssW, cssH);
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      if (p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h) return i;
+    }
+    return -1;
+  }
+
+  /* ---------- images ---------- */
+  function loadImage(file) {
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => res({ img, url });
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('bad image')); };
+      img.src = url;
+    });
+  }
+  function freeCell(i) {
+    const c = state.cells[i];
+    if (c) URL.revokeObjectURL(c.url);
+    state.cells[i] = null;
+  }
+  async function placeFiles(files, start) {
+    files = [...files].filter(f => f.type.startsWith('image/'));
+    if (!files.length) { toast('That isn’t an image file.'); return; }
+    const n = count();
+    // first file goes to the target slot; the rest fill empty slots after it, wrapping round
+    const targets = [start];
+    for (let k = 1; k <= n && targets.length < files.length; k++) {
+      const j = (start + k) % n;
+      if (!state.cells[j]) targets.push(j);
+    }
+    let failed = 0;
+    for (let k = 0; k < targets.length; k++) {
+      try {
+        const { img, url } = await loadImage(files[k]);
+        freeCell(targets[k]);
+        state.cells[targets[k]] = { img, url, scale: 1, ox: 0, oy: 0 };
+      } catch { failed++; }
+    }
+    if (files.length > targets.length) toast(`${files.length - targets.length} image(s) didn’t fit — add more slots.`);
+    else if (failed) toast(`${failed} image(s) couldn’t be read.`);
+    state.selected = targets[0];
+    render();
+  }
+
+  /* ---------- pointer interaction ---------- */
+  const pointers = new Map();
+  let drag = null;   // {idx, start:{x,y}, ox, oy, moved}
+  let pinch = null;  // {idx, dist, scale}
+
+  canvas.addEventListener('pointerdown', e => {
+    canvas.setPointerCapture(e.pointerId);
+    const p = pointFromEvent(e);
+    pointers.set(e.pointerId, p);
+    if (pointers.size === 2 && drag) {
+      const [a, b] = [...pointers.values()];
+      const cell = state.cells[drag.idx];
+      if (cell) pinch = { idx: drag.idx, dist: Math.hypot(a.x - b.x, a.y - b.y), scale: cell.scale };
+      drag = null;
+      return;
+    }
+    const idx = cellAt(p);
+    if (idx < 0) return;
+    const cell = state.cells[idx];
+    if (e.altKey && cell) {
+      pointers.delete(e.pointerId);
+      state.selected = idx;
+      startMove(idx, e);
+      return;
+    }
+    drag ={ idx, start: p, ox: cell?.ox ?? 0, oy: cell?.oy ?? 0, moved: false };
+    if (cell) canvas.className = 'grabbing';
+  });
+
+  canvas.addEventListener('pointermove', e => {
+    const p = pointFromEvent(e);
+    if (pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
+    if (pinch && pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      const cell = state.cells[pinch.idx];
+      if (cell) {
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        cell.scale = Math.min(8, Math.max(0.25, pinch.scale * d / pinch.dist));
+        clampCell(cell, layout(cssW, cssH)[pinch.idx]);
+        render();
+      }
+      return;
+    }
+    if (drag) {
+      const dx = p.x - drag.start.x, dy = p.y - drag.start.y;
+      if (Math.hypot(dx, dy) > 3) drag.moved = true;
+      const cell = state.cells[drag.idx];
+      if (cell && drag.moved) {
+        const r = layout(cssW, cssH)[drag.idx];
+        cell.ox = drag.ox + dx / r.w;
+        cell.oy = drag.oy + dy / r.h;
+        clampCell(cell, r);
+        render();
+      }
+      return;
+    }
+    const idx = cellAt(p);
+    if (idx !== state.hover) { state.hover = idx; render(); }
+    canvas.className = idx < 0 ? '' : state.cells[idx] ? 'grab' : 'add';
+  });
+
+  function endPointer(e) {
+    pointers.delete(e.pointerId);
+    if (pinch) { if (pointers.size < 2) pinch = null; return; }
+    if (!drag) return;
+    const { idx, moved } = drag;
+    drag = null;
+    if (!moved) {
+      if (state.cells[idx]) { state.selected = idx; }
+      else { state.selected = idx; pickTarget = idx; picker.click(); }
+    } else {
+      state.selected = idx;
+    }
+    const cur = state.cells[cellAt(pointFromEvent(e))];
+    canvas.className = cur ? 'grab' : '';
+    render();
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('pointerleave', () => {
+    if (!drag && state.hover !== -1) { state.hover = -1; render(); }
+  });
+
+  function zoomCell(idx, k, p) {
+    const cell = state.cells[idx];
+    if (!cell) return;
+    const r = layout(cssW, cssH)[idx];
+    const next = Math.min(8, Math.max(0.25, cell.scale * k));
+    k = next / cell.scale;
+    // keep the point under the cursor fixed
+    const px = p ? p.x - (r.x + r.w / 2) : 0, py = p ? p.y - (r.y + r.h / 2) : 0;
+    cell.ox = (px - (px - cell.ox * r.w) * k) / r.w;
+    cell.oy = (py - (py - cell.oy * r.h) * k) / r.h;
+    cell.scale = next;
+    clampCell(cell, r);
+    render();
+  }
+  canvas.addEventListener('wheel', e => {
+    const p = pointFromEvent(e);
+    const idx = cellAt(p);
+    if (idx < 0 || !state.cells[idx]) return;
+    e.preventDefault();
+    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+    zoomCell(idx, Math.exp(-dy * 0.0015), p);
+  }, { passive: false });
+
+  /* ---------- drag & drop files ---------- */
+  stage.addEventListener('dragover', e => {
+    if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    const idx = cellAt(pointFromEvent(e));
+    if (idx !== state.dragOver) { state.dragOver = idx; render(); }
+  });
+  stage.addEventListener('dragleave', e => {
+    if (e.relatedTarget && stage.contains(e.relatedTarget)) return;
+    state.dragOver = -1; render();
+  });
+  stage.addEventListener('drop', e => {
+    e.preventDefault();
+    const idx = cellAt(pointFromEvent(e));
+    state.dragOver = -1;
+    if (idx >= 0 && e.dataTransfer.files.length) placeFiles(e.dataTransfer.files, idx);
+    else render();
+  });
+  // stop stray drops from navigating away
+  window.addEventListener('dragover', e => e.preventDefault());
+  window.addEventListener('drop', e => e.preventDefault());
+
+  picker.addEventListener('change', () => {
+    if (picker.files.length) placeFiles(picker.files, pickTarget);
+    picker.value = '';
+  });
+
+  /* ---------- paste ---------- */
+  function pasteTarget() {
+    if (state.hover >= 0) return state.hover;
+    if (state.selected >= 0 && state.selected < count()) return state.selected;
+    for (let i = 0; i < count(); i++) if (!state.cells[i]) return i;
+    return 0;
+  }
+  document.addEventListener('paste', e => {
+    const files = [...(e.clipboardData?.items || [])]
+      .filter(it => it.kind === 'file' && it.type.startsWith('image/'))
+      .map(it => it.getAsFile()).filter(Boolean);
+    if (!files.length) { toast('Nothing to paste — copy an image first.'); return; }
+    e.preventDefault();
+    placeFiles(files, pasteTarget());
+  });
+
+  /* ---------- move an image to another slot ---------- */
+  let move = null;
+  function startMove(idx, e) {
+    const cell = state.cells[idx];
+    if (!cell) return;
+    const ghost = document.createElement('div');
+    ghost.className = 'ghost';
+    ghost.style.backgroundImage = `url("${cell.url}")`;
+    ghost.style.left = e.clientX + 'px';
+    ghost.style.top = e.clientY + 'px';
+    document.body.appendChild(ghost);
+    move = { from: idx, ghost };
+    state.moveFrom = idx;
+    cellbar.classList.add('moving');
+    document.body.classList.add('moving');
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', endMove);
+    window.addEventListener('pointercancel', endMove);
+    render();
+  }
+  function onMove(e) {
+    if (!move) return;
+    move.ghost.style.left = e.clientX + 'px';
+    move.ghost.style.top = e.clientY + 'px';
+    let idx = cellAt(pointFromEvent(e));
+    if (idx === move.from) idx = -1;
+    if (idx !== state.dragOver) { state.dragOver = idx; render(); }
+  }
+  function endMove(e) {
+    if (!move) return;
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', endMove);
+    window.removeEventListener('pointercancel', endMove);
+    move.ghost.remove();
+    document.body.classList.remove('moving');
+    cellbar.classList.remove('moving');
+    const from = move.from, to = e.type === 'pointerup' ? state.dragOver : -1;
+    move = null;
+    state.dragOver = -1;
+    state.moveFrom = -1;
+    if (to >= 0) {
+      [state.cells[from], state.cells[to]] = [state.cells[to], state.cells[from]];
+      const rects = layout(cssW, cssH);
+      [from, to].forEach(i => { if (state.cells[i]) clampCell(state.cells[i], rects[i]); });
+      state.selected = to;
+    }
+    render();
+  }
+  cellbar.querySelector('[data-act="move"]').addEventListener('pointerdown', e => {
+    e.preventDefault();
+    startMove(state.selected, e);
+  });
+
+  /* ---------- per-cell toolbar ---------- */
+  function placeCellbar() {
+    const idx = state.selected;
+    if (idx < 0 || idx >= count() || !state.cells[idx] || drag || pinch) { cellbar.hidden = true; return; }
+    const r = layout(cssW, cssH)[idx];
+    cellbar.hidden = false;
+    cellbar.style.left = (r.x + r.w - 6) + 'px';
+    cellbar.style.top = (r.y + 6) + 'px';
+  }
+  cellbar.addEventListener('pointerdown', e => e.stopPropagation());
+  cellbar.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const idx = state.selected, cell = state.cells[idx];
+    if (!cell) return;
+    switch (b.dataset.act) {
+      case 'in': zoomCell(idx, 1.15); break;
+      case 'out': zoomCell(idx, 1 / 1.15); break;
+      case 'fit': cell.scale = 1; cell.ox = 0; cell.oy = 0; render(); break;
+      case 'replace': pickTarget = idx; picker.click(); break;
+      case 'remove': freeCell(idx); render(); break;
+    }
+  });
+
+  /* ---------- keyboard ---------- */
+  document.addEventListener('keydown', e => {
+    if (e.target.matches('input, select')) return;
+    const idx = state.selected, cell = state.cells[idx];
+    if (e.key === 'Escape') { state.selected = -1; render(); return; }
+    if (!cell) return;
+    const r = layout(cssW, cssH)[idx];
+    const step = e.shiftKey ? 20 : 4;
+    const nudge = (dx, dy) => { cell.ox += dx / r.w; cell.oy += dy / r.h; clampCell(cell, r); render(); e.preventDefault(); };
+    switch (e.key) {
+      case 'Delete': case 'Backspace': freeCell(idx); render(); e.preventDefault(); break;
+      case '+': case '=': zoomCell(idx, 1.1); break;
+      case '-': case '_': zoomCell(idx, 1 / 1.1); break;
+      case '0': cell.scale = 1; cell.ox = 0; cell.oy = 0; render(); break;
+      case 'ArrowLeft': nudge(-step, 0); break;
+      case 'ArrowRight': nudge(step, 0); break;
+      case 'ArrowUp': nudge(0, -step); break;
+      case 'ArrowDown': nudge(0, step); break;
+    }
+  });
+
+  /* ---------- controls ---------- */
+  function setGrid(cols, rows) {
+    state.cols = Math.min(MAX, Math.max(1, cols));
+    state.rows = Math.min(MAX, Math.max(1, rows));
+    $('colsOut').textContent = state.cols;
+    $('rowsOut').textContent = state.rows;
+    if (state.selected >= count()) state.selected = -1;
+    const rects = layout(cssW, cssH);
+    state.cells.forEach((c, i) => { if (c && rects[i]) clampCell(c, rects[i]); });
+    const hidden = state.cells.slice(count()).filter(Boolean).length;
+    if (hidden) toast(`${hidden} image(s) hidden — add slots to bring them back.`);
+    render();
+  }
+  $('colsDown').onclick = () => setGrid(state.cols - 1, state.rows);
+  $('colsUp').onclick = () => setGrid(state.cols + 1, state.rows);
+  $('rowsDown').onclick = () => setGrid(state.cols, state.rows - 1);
+  $('rowsUp').onclick = () => setGrid(state.cols, state.rows + 1);
+
+  $('gap').addEventListener('input', e => {
+    state.gap = +e.target.value;
+    $('gapOut').textContent = state.gap;
+    const rects = layout(cssW, cssH);
+    state.cells.forEach((c, i) => { if (c && rects[i]) clampCell(c, rects[i]); });
+    render();
+  });
+  $('fill').addEventListener('input', e => { state.fill = e.target.value; render(); });
+  $('size').addEventListener('change', e => { state.width = +e.target.value; });
+  const setFmt = f => {
+    state.fmt = f;
+    $('fmtJpg').setAttribute('aria-pressed', f === 'jpeg');
+    $('fmtPng').setAttribute('aria-pressed', f === 'png');
+  };
+  $('fmtJpg').onclick = () => setFmt('jpeg');
+  $('fmtPng').onclick = () => setFmt('png');
+
+  let clearArmed = null;
+  $('clear').onclick = () => {
+    const btn = $('clear');
+    if (!state.cells.some(Boolean)) return;
+    if (!clearArmed) {
+      btn.textContent = 'Clear all?'; btn.classList.add('warn');
+      clearArmed = setTimeout(() => { btn.textContent = 'Clear'; btn.classList.remove('warn'); clearArmed = null; }, 2500);
+      return;
+    }
+    clearTimeout(clearArmed); clearArmed = null;
+    btn.textContent = 'Clear'; btn.classList.remove('warn');
+    state.cells.forEach((_, i) => freeCell(i));
+    state.selected = -1;
+    render();
+  };
+
+  /* ---------- export ---------- */
+  let downloads = null;
+  if (window.claude?.use) window.claude.use('downloads').then(d => { downloads = d; }).catch(() => {});
+
+  $('export').onclick = async () => {
+    const W = state.width, H = Math.round(W * 9 / 16);
+    const off = document.createElement('canvas');
+    off.width = W; off.height = H;
+    draw(off.getContext('2d'), W, H, false);
+    const type = state.fmt === 'png' ? 'image/png' : 'image/jpeg';
+    const blob = await new Promise(res => off.toBlob(res, type, 0.92));
+    if (!blob) { toast('Couldn’t render the image.'); return; }
+    const ext = state.fmt === 'png' ? 'png' : 'jpg';
+    const filename = `mosaic-${state.cols}x${state.rows}-${W}x${H}.${ext}`;
+    if (downloads) {
+      try {
+        const r = await downloads.save({ filename, data: blob });
+        if (r.status === 'saved') toast(`Saved ${filename}`);
+        return;
+      } catch (err) {
+        if (err?.code === 'declined') return;
+        if (err?.code === 'rate_limited') { toast('A save prompt is already open.'); return; }
+      }
+    }
+    showFallback(blob, filename);
+  };
+
+  function showFallback(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const ov = document.createElement('div');
+    ov.className = 'overlay';
+    ov.innerHTML = `<figure><img alt="Exported mosaic"><figcaption>Right-click or long-press the image to save it as <b></b>.<br><button type="button" class="btn" style="margin-top:12px">Close</button></figcaption></figure>`;
+    ov.querySelector('img').src = url;
+    ov.querySelector('b').textContent = filename;
+    const close = () => { ov.remove(); URL.revokeObjectURL(url); };
+    ov.querySelector('button').onclick = close;
+    ov.addEventListener('click', e => { if (e.target === ov) close(); });
+    document.body.appendChild(ov);
+  }
+
+  /* ---------- misc ---------- */
+  let toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+  }
+
+  if (document.fonts?.ready) document.fonts.ready.then(render);
+  fit();
+})();
+</script>
+
+</body></html>
