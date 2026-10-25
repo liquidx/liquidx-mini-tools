@@ -30,6 +30,12 @@ export const tools: Tool[] = [
 		title: 'Mountain Logo',
 		date: '2026-10-11',
 		summary: 'Generate minimalist three-peak mountain logos and copy or download them as SVG.'
+	},
+	{
+		slug: 'svg-to-png',
+		title: 'SVG to PNG',
+		date: '2026-10-25',
+		summary: 'Drop in an SVG and download it rendered as a PNG at any width (640px by default).'
 	}
 ];
 

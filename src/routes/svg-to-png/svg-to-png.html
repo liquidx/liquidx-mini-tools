@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SVG to PNG</title>
+<style>
+/* Layout: one centred column — drop zone, a single row of controls, then the rendered PNG. */
+:root {
+  --bg: #fafaf9;
+  --panel: #ffffff;
+  --line: #e2e0dc;
+  --text: #1c1b19;
+  --muted: #77736c;
+  --accent: #2f6fe4;
+  --checker: #eeece8;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0e0d;
+    --panel: #171716;
+    --line: #2c2b29;
+    --text: #e8e6e3;
+    --muted: #8d8a85;
+    --accent: #6b9cff;
+    --checker: #222120;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+h1 { margin: 0; font-size: 18px; font-weight: 600; }
+.sub { margin: 4px 0 0; color: var(--muted); }
+
+.drop {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  padding: 24px;
+  border: 1.5px dashed var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--muted);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.drop:hover, .drop:focus-visible { border-color: var(--muted); outline: none; }
+body.dragging .drop { border-color: var(--accent); color: var(--text); }
+.drop strong { color: var(--text); font-weight: 500; }
+.drop .file { margin-top: 6px; font-size: 12px; }
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+label { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
+input[type=number] {
+  width: 88px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+input[type=color] { width: 32px; height: 26px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
+input[type=color]:disabled { opacity: .35; }
+.dims { color: var(--muted); font-variant-numeric: tabular-nums; }
+.spacer { flex: 1; }
+a.download {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 500;
+  text-decoration: none;
+}
+a.download[aria-disabled=true] { opacity: .35; pointer-events: none; }
+
+.preview {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background-color: var(--panel);
+  background-image:
+    linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%),
+    linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+.preview img { display: block; max-width: 100%; height: auto; }
+.error { margin: 0; color: #d4513b; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>SVG to PNG</h1>
+    <p class="sub">Drop an SVG on the page to render it as a PNG. Everything happens in your browser.</p>
+  </header>
+
+  <div class="drop" id="drop" role="button" tabindex="0">
+    <div>
+      <strong>Drop an SVG here</strong>, paste one, or click to choose a file
+      <div class="file" id="fileName"></div>
+    </div>
+  </div>
+  <input type="file" id="fileInput" accept=".svg,image/svg+xml" hidden>
+
+  <div class="controls">
+    <label>Width <input type="number" id="width" value="640" min="1" max="16384" step="1"> px</label>
+    <label><input type="checkbox" id="useBg"> Background <input type="color" id="bg" value="#ffffff" disabled></label>
+    <span class="dims" id="dims"></span>
+    <span class="spacer"></span>
+    <a class="download" id="download" aria-disabled="true">Download PNG</a>
+  </div>
+
+  <p class="error" id="error" hidden></p>
+  <div class="preview" id="preview" hidden><img id="out" alt="Rendered PNG"></div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const drop = $('drop'), fileInput = $('fileInput'), widthInput = $('width');
+const useBg = $('useBg'), bgInput = $('bg'), dims = $('dims');
+const download = $('download'), errorEl = $('error'), preview = $('preview'), out = $('out');
+
+let svgText = null;
+let baseName = 'image';
+let pngUrl = null;
+let renderId = 0;
+
+// Intrinsic aspect ratio: prefer viewBox, then absolute width/height attributes.
+function intrinsicSize(svg) {
+  const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+  const attr = (name) => {
+    const v = svg.getAttribute(name);
+    return v && !v.endsWith('%') ? parseFloat(v) : NaN;
+  };
+  const w = attr('width'), h = attr('height');
+  if (w > 0 && h > 0) return { w, h };
+  if (vb.length === 4 && vb[2] > 0 && vb[3] > 0) return { w: vb[2], h: vb[3] };
+  return { w: 300, h: 150 };
+}
+
+function showError(msg) {
+  errorEl.textContent = msg;
+  errorEl.hidden = !msg;
+}
+
+async function render() {
+  if (!svgText) return;
+  const id = ++renderId;
+  showError('');
+
+  const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  const svg = doc.documentElement;
+  if (doc.querySelector('parsererror') || svg.localName !== 'svg') {
+    showError("That file doesn't look like a valid SVG.");
+    return;
+  }
+
+  const { w, h } = intrinsicSize(svg);
+  const width = Math.max(1, Math.min(16384, Math.round(Number(widthInput.value) || 640)));
+  const height = Math.max(1, Math.round(width * h / w));
+
+  // Rasterise at the target size so the vector is drawn crisply, not scaled up from a bitmap.
+  if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.setAttribute('width', width);
+  svg.setAttribute('height', height);
+  const blob = new Blob([new XMLSerializer().serializeToString(svg)], { type: 'image/svg+xml' });
+  const svgUrl = URL.createObjectURL(blob);
+
+  try {
+    const img = new Image();
+    img.src = svgUrl;
+    await img.decode();
+    if (id !== renderId) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (useBg.checked) {
+      ctx.fillStyle = bgInput.value;
+      ctx.fillRect(0, 0, width, height);
+    }
+    ctx.drawImage(img, 0, 0, width, height);
+
+    const png = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (id !== renderId) return;
+    if (!png) throw new Error('encode failed');
+
+    if (pngUrl) URL.revokeObjectURL(pngUrl);
+    pngUrl = URL.createObjectURL(png);
+    out.src = pngUrl;
+    preview.hidden = false;
+    download.href = pngUrl;
+    download.download = `${baseName}-${width}.png`;
+    download.setAttribute('aria-disabled', 'false');
+    dims.textContent = `${width} × ${height}`;
+  } catch {
+    if (id === renderId) showError("The browser couldn't render this SVG.");
+  } finally {
+    URL.revokeObjectURL(svgUrl);
+  }
+}
+
+function load(text, name) {
+  svgText = text;
+  baseName = (name || 'image').replace(/\.svg$/i, '') || 'image';
+  $('fileName').textContent = name || 'Pasted SVG';
+  render();
+}
+
+async function loadFile(file) {
+  if (!file) return;
+  if (file.type !== 'image/svg+xml' && !/\.svg$/i.test(file.name)) {
+    showError('Please drop an .svg file.');
+    return;
+  }
+  load(await file.text(), file.name);
+}
+
+// Accept drops anywhere on the page, not just on the drop zone.
+let dragDepth = 0;
+addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; document.body.classList.add('dragging'); });
+addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove('dragging'); } });
+addEventListener('dragover', (e) => e.preventDefault());
+addEventListener('drop', (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove('dragging');
+  loadFile(e.dataTransfer.files[0]);
+});
+
+addEventListener('paste', (e) => {
+  const file = [...e.clipboardData.files].find((f) => f.type === 'image/svg+xml');
+  if (file) return loadFile(file);
+  const text = e.clipboardData.getData('text/plain').trim();
+  if (text.includes('<svg')) load(text, null);
+});
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
+fileInput.addEventListener('change', () => { loadFile(fileInput.files[0]); fileInput.value = ''; });
+
+widthInput.addEventListener('input', render);
+useBg.addEventListener('change', () => { bgInput.disabled = !useBg.checked; render(); });
+bgInput.addEventListener('input', render);
+</script>
+</body>
+</html>
