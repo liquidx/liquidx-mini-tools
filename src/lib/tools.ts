@@ -24,6 +24,12 @@ export const tools: Tool[] = [
 		title: '16:9 Mosaic Maker',
 		date: '2026-10-11',
 		summary: 'Arrange images into a grid on a 16:9 sheet and export it as a JPEG or PNG.'
+	},
+	{
+		slug: 'mountain-logo',
+		title: 'Mountain Logo',
+		date: '2026-10-11',
+		summary: 'Generate minimalist three-peak mountain logos and copy or download them as SVG.'
 	}
 ];
 
