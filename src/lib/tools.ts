@@ -36,6 +36,13 @@ export const tools: Tool[] = [
 		title: 'SVG to PNG',
 		date: '2026-10-25',
 		summary: 'Drop in an SVG and download it rendered as a PNG at any width (640px by default).'
+	},
+	{
+		slug: 'iso-shapes',
+		title: 'Isometric Shapes',
+		date: '2026-10-26',
+		summary:
+			'Draw shaded, hatched or stippled cubes, cylinders and spheres on an isometric grid and export SVG or PNG.'
 	}
 ];
 

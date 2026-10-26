@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Isometric Shapes</title>
+<style>
+/* Layout: square scene on the left (sticky), scrolling settings panel on the right. */
+:root {
+  --bg: #fafaf9;
+  --panel: #ffffff;
+  --line: #e2e0dc;
+  --text: #1c1b19;
+  --muted: #77736c;
+  --accent: #2f6fe4;
+  --checker: #eeece8;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e0e0d;
+    --panel: #171716;
+    --line: #2c2b29;
+    --text: #e8e6e3;
+    --muted: #8d8a85;
+    --accent: #6b9cff;
+    --checker: #222120;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 100vh; }
+.stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+}
+.stage header { width: min(100%, calc(100vh - 140px)); }
+h1 { margin: 0; font-size: 18px; font-weight: 600; }
+.sub { margin: 2px 0 0; color: var(--muted); }
+.canvas-wrap {
+  flex: none;
+  width: min(100%, calc(100vh - 140px));
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background-color: var(--panel);
+  background-image:
+    linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%),
+    linear-gradient(45deg, var(--checker) 25%, transparent 25%, transparent 75%, var(--checker) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+#scene { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; user-select: none; }
+#scene.dragging { cursor: grabbing; }
+#scene [data-id] { cursor: move; }
+.toolbar {
+  width: min(100%, calc(100vh - 140px));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.hint { color: var(--muted); font-size: 12px; }
+.spacer { flex: 1; }
+
+.panel {
+  height: 100vh;
+  overflow-y: auto;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+}
+section { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+h2 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+.row > label { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row > .wide { grid-column: 2 / 4; }
+input[type=range] { width: 100%; margin: 0; accent-color: var(--accent); }
+input[type=number], select {
+  width: 100%;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+input[type=color] { width: 100%; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
+input[type=checkbox] { justify-self: start; margin: 0; accent-color: var(--accent); }
+button, a.btn {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+}
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .4; pointer-events: none; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.toolbar select { width: auto; }
+
+.shape-list { display: flex; flex-direction: column; gap: 2px; margin: 0 0 10px; }
+.shape-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border-color: transparent;
+  background: none;
+  text-align: left;
+  font-weight: 400;
+}
+.shape-item.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0, 0, 0, .25); flex: none; }
+.shape-item .meta { margin-left: auto; color: var(--muted); font-size: 11px; }
+.subhead { margin: 12px 0 4px; font-size: 11px; color: var(--muted); }
+.empty { color: var(--muted); margin: 0; }
+
+@media (max-width: 820px) {
+  .app { grid-template-columns: 1fr; }
+  .stage { position: static; height: auto; padding: 16px; }
+  .stage header, .canvas-wrap, .toolbar { width: 100%; }
+  .panel { height: auto; border-left: 0; border-top: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="stage">
+    <header>
+      <h1>Isometric Shapes</h1>
+      <p class="sub">Arrange cubes, cylinders and spheres on a projected grid, then export as SVG or PNG.</p>
+    </header>
+    <div class="canvas-wrap">
+      <svg id="scene" viewBox="0 0 800 800" xmlns="http://www.w3.org/2000/svg" aria-label="Scene preview"></svg>
+    </div>
+    <div class="toolbar">
+      <span class="hint">Drag a shape to move it · drag empty space to pan</span>
+      <span class="spacer"></span>
+      <button id="copySvg">Copy SVG</button>
+      <button id="dlSvg">SVG</button>
+      <select id="pngSize" aria-label="PNG size">
+        <option value="800">800 px</option>
+        <option value="1600" selected>1600 px</option>
+        <option value="2400">2400 px</option>
+        <option value="3200">3200 px</option>
+      </select>
+      <button id="dlPng" class="primary">PNG</button>
+    </div>
+  </div>
+
+  <aside class="panel">
+    <section><h2>View</h2><div id="viewFields"></div>
+      <div class="btns" style="margin-top:8px"><button id="centerView">Center view</button></div>
+    </section>
+    <section><h2>Light &amp; shading</h2><div id="lightFields"></div></section>
+    <section><h2>Background</h2><div id="bgFields"></div></section>
+    <section>
+      <h2>Shapes</h2>
+      <div class="shape-list" id="shapeList"></div>
+      <div class="btns">
+        <button data-add="cube">+ Cube</button>
+        <button data-add="cylinder">+ Cylinder</button>
+        <button data-add="sphere">+ Sphere</button>
+      </div>
+      <div class="btns" style="margin-top:6px">
+        <button id="dupShape">Duplicate</button>
+        <button id="delShape">Delete</button>
+      </div>
+      <div id="snapField" style="margin-top:8px"></div>
+    </section>
+    <section><h2 id="shapeTitle">Selected shape</h2><div id="shapeFields"></div></section>
+    <section><div class="btns"><button id="resetAll">Reset everything</button></div></section>
+  </aside>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const SIZE = 800;
+const DEG = Math.PI / 180;
+const STORE = 'iso-shapes:v1';
+
+const PRESETS = {
+  iso: { label: 'Isometric', az: 45, el: 35.264 },
+  dimetric: { label: 'Dimetric 2:1', az: 45, el: 30 },
+  trimetric: { label: 'Trimetric', az: 30, el: 25 },
+  top: { label: 'Top (plan)', az: 45, el: 90 },
+  front: { label: 'Front (elevation)', az: 0, el: 0 },
+  custom: { label: 'Custom' }
+};
+
+const SHAPE_BASE = {
+  x: 0, y: 0, z: 0, w: 1.5, d: 1.5, h: 1.5, rot: 0, r: 0.9,
+  fill: '#e6e5df', lit: true, stroke: '#2a2a28', strokeWidth: 1.2,
+  texture: 'none', texColor: '#2a2a28', spacing: 0.12, texWeight: 0.8, texFloor: 0.2, hatchAngle: 45
+};
+
+function defaults() {
+  return {
+    view: { preset: 'iso', az: 45, el: 35.264, zoom: 52, panX: 0, panY: -40 },
+    light: { az: -25, el: 55, ambient: 0.3, strength: 0.4, shadow: '#3c3b36', bands: 0, cast: false, castOpacity: 0.15 },
+    bg: { color: '#f2f0e6', transparent: false, grid: true, gridColor: '#d5d2c3', gridWidth: 1, gridStep: 1, diagonals: false },
+    snap: 0.25,
+    selected: 1,
+    shapes: [
+      { ...SHAPE_BASE, id: 1, type: 'cube', x: 2.2, y: -2.4, w: 2.2, d: 2, h: 0.85, fill: '#f2f0e6', lit: false, texture: 'hatch', spacing: 0.13 },
+      { ...SHAPE_BASE, id: 2, type: 'cube', x: -2.2, y: -2.2, w: 2, d: 2, h: 0.8 },
+      { ...SHAPE_BASE, id: 3, type: 'cylinder', x: -0.4, y: 2.3, r: 1, h: 0.8, fill: '#f2f0e6', lit: false, texture: 'stipple', spacing: 0.1, texWeight: 0.9, texFloor: 0.3 },
+      { ...SHAPE_BASE, id: 4, type: 'sphere', x: 2.6, y: 1.8, r: 0.85, fill: '#c9d4dd' }
+    ]
+  };
+}
+
+let state = load();
+function load() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORE));
+    if (saved && Array.isArray(saved.shapes)) {
+      const d = defaults();
+      return {
+        ...d, ...saved,
+        view: { ...d.view, ...saved.view },
+        light: { ...d.light, ...saved.light },
+        bg: { ...d.bg, ...saved.bg },
+        shapes: saved.shapes.map((s) => ({ ...SHAPE_BASE, ...s }))
+      };
+    }
+  } catch {}
+  return defaults();
+}
+let saveTimer;
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {} }, 250);
+}
+
+/* ---------- math ---------- */
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const len = (a) => Math.hypot(a[0], a[1], a[2]);
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const f2 = (n) => Math.round(n * 100) / 100;
+
+// Orthographic camera looking from direction c (azimuth/elevation); r = screen right, u = screen up.
+let cam;
+function camera() {
+  const a = state.view.az * DEG, e = state.view.el * DEG;
+  const ca = Math.cos(a), sa = Math.sin(a), ce = Math.cos(e), se = Math.sin(e);
+  // Light angle is relative to the view, so rotating the camera keeps the same lighting on screen.
+  const la = (state.view.az + state.light.az) * DEG, le = state.light.el * DEG;
+  return {
+    a, ca, sa, se,
+    c: [ce * ca, ce * sa, se],
+    r: [-sa, ca, 0],
+    u: [-se * ca, -se * sa, ce],
+    L: [Math.cos(le) * Math.cos(la), Math.cos(le) * Math.sin(la), Math.sin(le)],
+    k: state.view.zoom,
+    ox: SIZE / 2 + state.view.panX,
+    oy: SIZE / 2 + state.view.panY
+  };
+}
+const P = (p) => [cam.ox + cam.k * dot(p, cam.r), cam.oy - cam.k * dot(p, cam.u)];
+
+// Screen point -> ground plane (z = 0). Undefined when looking exactly edge-on.
+function toGround(sx, sy) {
+  const du = (sx - cam.ox) / cam.k, dv = (sy - cam.oy) / cam.k;
+  const p = dv / cam.se;
+  return [cam.ca * p - cam.sa * du, cam.sa * p + cam.ca * du];
+}
+
+function mulberry32(seed) {
+  return () => {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function hull(pts) {
+  pts = pts.slice().sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const turn = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], hi = [];
+  for (const p of pts) { while (lo.length > 1 && turn(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (const p of pts.reverse()) { while (hi.length > 1 && turn(hi[hi.length - 2], hi[hi.length - 1], p) <= 0) hi.pop(); hi.push(p); }
+  return lo.slice(0, -1).concat(hi.slice(0, -1));
+}
+
+// Clip the line p + d·t to the rectangle [0,W]×[0,H]; returns [t0, t1] or null.
+function clipRect(px, py, dx, dy, W, H) {
+  let t0 = -Infinity, t1 = Infinity;
+  for (const [p, d, hiV] of [[px, dx, W], [py, dy, H]]) {
+    if (Math.abs(d) < 1e-9) { if (p < 0 || p > hiV) return null; continue; }
+    let a = -p / d, b = (hiV - p) / d;
+    if (a > b) [a, b] = [b, a];
+    t0 = Math.max(t0, a); t1 = Math.min(t1, b);
+  }
+  return t1 > t0 + 1e-9 ? [t0, t1] : null;
+}
+
+/* ---------- colour & shading ---------- */
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const rgbHex = (c) => '#' + c.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+const mix = (a, b, t) => { const A = hexRgb(a), B = hexRgb(b); return rgbHex(A.map((v, i) => v + (B[i] - v) * t)); };
+
+const lightAmount = (n) => Math.max(0, dot(n, cam.L));
+function shade(s, n) {
+  if (!s.lit) return s.fill;
+  const { ambient, strength, shadow, bands } = state.light;
+  let l = ambient + (1 - ambient) * lightAmount(n);
+  if (bands > 0) l = Math.round(l * bands) / bands;
+  return mix(s.fill, shadow, strength * (1 - l));
+}
+// Texture tone: 0 = fully lit (sparse), 1 = facing away (dense).
+const texTone = (s, n) => s.texFloor + (1 - s.texFloor) * (1 - lightAmount(n));
+
+/* ---------- texture collector ---------- */
+// Hatch segments are grouped by stroke width; stipple dots go into one path.
+function Tex(s) {
+  const lines = new Map();
+  let dots = '';
+  return {
+    seg(a, b, w) {
+      if (w < 0.08) return;
+      const key = w.toFixed(2);
+      const A = P(a), B = P(b);
+      lines.set(key, (lines.get(key) || '') + `M${f2(A[0])} ${f2(A[1])}L${f2(B[0])} ${f2(B[1])}`);
+    },
+    dot(p) {
+      const [x, y] = P(p), r = s.texWeight;
+      dots += `M${f2(x - r)} ${f2(y)}a${r} ${r} 0 1 0 ${f2(2 * r)} 0a${r} ${r} 0 1 0 ${f2(-2 * r)} 0`;
+    },
+    svg() {
+      let out = '';
+      for (const [w, d] of lines) out += `<path d="${d}" fill="none" stroke="${s.texColor}" stroke-width="${w}" stroke-linecap="round"/>`;
+      if (dots) out += `<path d="${dots}" fill="${s.texColor}"/>`;
+      return out;
+    }
+  };
+}
+
+// Parallel hatch lines across a flat parallelogram face (origin o, unit edges u1/u2 of length L1/L2).
+function hatchFace(s, tex, n, o, u1, u2, L1, L2, angle) {
+  const t = texTone(s, n);
+  if (t < 0.03) return;
+  const sp = s.spacing / t;
+  const dx = Math.cos(angle * DEG), dy = Math.sin(angle * DEG), nx = -dy, ny = dx;
+  const proj = [0, L1 * nx, L2 * ny, L1 * nx + L2 * ny];
+  const lo = Math.min(...proj), hi = Math.max(...proj);
+  for (let off = (Math.floor(lo / sp) + 0.5) * sp; off < hi; off += sp) {
+    const px = nx * off, py = ny * off;
+    const c = clipRect(px, py, dx, dy, L1, L2);
+    if (!c) continue;
+    const at = (tt) => add(o, add(mul(u1, px + dx * tt), mul(u2, py + dy * tt)));
+    tex.seg(at(c[0]), at(c[1]), s.texWeight);
+  }
+}
+
+function stippleFace(s, tex, n, o, u1, u2, L1, L2, rand) {
+  const t = texTone(s, n), sp = s.spacing;
+  for (let i = 0; i * sp < L1; i++) for (let j = 0; j * sp < L2; j++) {
+    const a = Math.min(L1, (i + 0.5 + (rand() - 0.5) * 0.4) * sp), b = Math.min(L2, (j + 0.5 + (rand() - 0.5) * 0.4) * sp);
+    if (rand() < t) tex.dot(add(o, add(mul(u1, a), mul(u2, b))));
+  }
+}
+
+// Curved-surface hatching: stroke width follows the tone instead of spacing.
+const curveWidth = (s, t, cross) => s.texWeight * 1.6 * (cross ? Math.max(0, (t - 0.4) / 0.6) : t);
+
+/* ---------- shapes ---------- */
+const BOX_FACES = [[0, 2, 6, 4], [1, 3, 7, 5], [0, 1, 5, 4], [2, 3, 7, 6], [0, 1, 3, 2], [4, 5, 7, 6]];
+const MAX_DOTS = 20000;
+
+function shapeCenter(s) {
+  if (s.type === 'cube') return [s.x, s.y, s.z + s.h / 2];
+  if (s.type === 'cylinder') return [s.x, s.y, s.z + s.h / 2];
+  return [s.x, s.y, s.z + s.r];
+}
+
+function boxCorners(s) {
+  const cr = Math.cos(s.rot * DEG), sr = Math.sin(s.rot * DEG), out = [];
+  for (let i = 0; i < 8; i++) {
+    const lx = (i & 1 ? 0.5 : -0.5) * s.w, ly = (i & 2 ? 0.5 : -0.5) * s.d, lz = i & 4 ? s.h : 0;
+    out.push([s.x + lx * cr - ly * sr, s.y + lx * sr + ly * cr, s.z + lz]);
+  }
+  return out;
+}
+
+function renderCube(s) {
+  const C = boxCorners(s), ctr = shapeCenter(s), tex = Tex(s);
+  let fills = '', outlines = '';
+  BOX_FACES.forEach((f, fi) => {
+    const o = C[f[0]], e1 = sub(C[f[1]], o), e2 = sub(C[f[3]], o);
+    const L1 = len(e1), L2 = len(e2);
+    if (L1 < 1e-6 || L2 < 1e-6) return;
+    let n = cross(e1, e2); n = mul(n, 1 / len(n));
+    const fc = mul(add(o, C[f[2]]), 0.5);
+    if (dot(n, sub(fc, ctr)) < 0) n = mul(n, -1);
+    if (dot(n, cam.c) <= 1e-6) return;
+    const pts = f.map((i) => P(C[i]).map(f2).join(',')).join(' ');
+    fills += `<polygon points="${pts}" fill="${shade(s, n)}"/>`;
+    if (s.strokeWidth > 0) outlines += `<polygon points="${pts}" fill="none"/>`;
+    const u1 = mul(e1, 1 / L1), u2 = mul(e2, 1 / L2);
+    if (s.texture === 'hatch' || s.texture === 'cross') {
+      hatchFace(s, tex, n, o, u1, u2, L1, L2, s.hatchAngle);
+      if (s.texture === 'cross' && texTone(s, n) > 0.4) hatchFace(s, tex, n, o, u1, u2, L1, L2, s.hatchAngle + 90);
+    } else if (s.texture === 'stipple') {
+      stippleFace(s, tex, n, o, u1, u2, L1, L2, mulberry32(s.id * 7919 + fi));
+    }
+  });
+  return { body: fills + tex.svg() + strokeGroup(s, outlines), pts: C.map(P) };
+}
+
+function renderCylinder(s, defs) {
+  const R = s.r, z0 = s.z, z1 = s.z + s.h, k = cam.k, tex = Tex(s);
+  const b = P([s.x, s.y, z0]), t = P([s.x, s.y, z1]);
+  const rx = R * k, ry = R * k * cam.se;
+  const sideN = (th) => [Math.cos(th), Math.sin(th), 0];
+  let body = '', outline = '';
+
+  if (s.h > 0 && cam.se < 0.9999) {
+    let fill = s.fill;
+    if (s.lit) {
+      // Lambert across the visible half, mapped to screen x (offset = sin of angle from view direction).
+      const id = `cyl${s.id}`, N = 48;
+      let stops = '';
+      for (let i = 0; i <= N; i++) {
+        const tt = (-90 + (180 * i) / N) * DEG;
+        stops += `<stop offset="${f2((Math.sin(tt) + 1) / 2 * 100)}%" stop-color="${shade(s, sideN(cam.a + tt))}"/>`;
+      }
+      defs.push(`<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${f2(b[0] - rx)}" y1="0" x2="${f2(b[0] + rx)}" y2="0">${stops}</linearGradient>`);
+      fill = `url(#${id})`;
+    }
+    const d = `M${f2(b[0] - rx)} ${f2(b[1])}A${f2(rx)} ${f2(ry)} 0 0 0 ${f2(b[0] + rx)} ${f2(b[1])}L${f2(t[0] + rx)} ${f2(t[1])}L${f2(t[0] - rx)} ${f2(t[1])}Z`;
+    body += `<path d="${d}" fill="${fill}"/>`;
+    // Outline only the silhouette; the top rim is stroked by the top ellipse.
+    outline += `<path d="M${f2(t[0] - rx)} ${f2(t[1])}L${f2(b[0] - rx)} ${f2(b[1])}A${f2(rx)} ${f2(ry)} 0 0 0 ${f2(b[0] + rx)} ${f2(b[1])}L${f2(t[0] + rx)} ${f2(t[1])}" fill="none"/>`;
+
+    const step = s.spacing / R;
+    if (s.texture === 'hatch' || s.texture === 'cross') {
+      for (let a = -Math.PI / 2 + step / 2; a < Math.PI / 2; a += step) {
+        const th = cam.a + a, n = sideN(th), p = [s.x + R * n[0], s.y + R * n[1]];
+        tex.seg([p[0], p[1], z0], [p[0], p[1], z1], curveWidth(s, texTone(s, n), false));
+      }
+      if (s.texture === 'cross') {
+        const SEG = 24;
+        for (let z = z0 + s.spacing / 2; z < z1; z += s.spacing) {
+          for (let i = 0; i < SEG; i++) {
+            const a0 = cam.a - Math.PI / 2 + (Math.PI * i) / SEG, a1 = a0 + Math.PI / SEG;
+            const w = curveWidth(s, texTone(s, sideN((a0 + a1) / 2)), true);
+            tex.seg([s.x + R * Math.cos(a0), s.y + R * Math.sin(a0), z], [s.x + R * Math.cos(a1), s.y + R * Math.sin(a1), z], w);
+          }
+        }
+      }
+    } else if (s.texture === 'stipple') {
+      const rand = mulberry32(s.id * 7919 + 1);
+      const cols = Math.max(1, Math.round((2 * Math.PI) / step));
+      for (let i = 0; i < cols; i++) for (let z = z0 + s.spacing / 2; z < z1; z += s.spacing) {
+        const th = (i * 2 * Math.PI) / cols + (rand() - 0.5) * step * 0.4;
+        const n = sideN(th), zz = z + (rand() - 0.5) * s.spacing * 0.4, keep = rand();
+        if (dot(n, cam.c) > 0.02 && keep < texTone(s, n)) tex.dot([s.x + R * n[0], s.y + R * n[1], zz]);
+      }
+    }
+  }
+
+  // Draw side texture before the top so the top disc covers line ends at the rim.
+  body += tex.svg();
+  if (cam.se > 1e-3) {
+    const top = Tex(s), n = [0, 0, 1];
+    body += `<ellipse cx="${f2(t[0])}" cy="${f2(t[1])}" rx="${f2(rx)}" ry="${f2(ry)}" fill="${shade(s, n)}"/>`;
+    if (s.texture === 'hatch' || s.texture === 'cross') {
+      const disc = (angle) => {
+        const tone = texTone(s, n);
+        if (tone < 0.03) return;
+        const sp = s.spacing / tone, dx = Math.cos(angle * DEG), dy = Math.sin(angle * DEG);
+        for (let off = -R + sp / 2; off < R; off += sp) {
+          const half = Math.sqrt(R * R - off * off), cx = s.x - dy * off, cy = s.y + dx * off;
+          top.seg([cx - dx * half, cy - dy * half, z1], [cx + dx * half, cy + dy * half, z1], s.texWeight);
+        }
+      };
+      disc(s.hatchAngle);
+      if (s.texture === 'cross' && texTone(s, n) > 0.4) disc(s.hatchAngle + 90);
+    } else if (s.texture === 'stipple') {
+      const rand = mulberry32(s.id * 7919 + 2), tone = texTone(s, n), sp = s.spacing;
+      for (let x = -R + sp / 2; x < R; x += sp) for (let y = -R + sp / 2; y < R; y += sp) {
+        const xx = x + (rand() - 0.5) * sp * 0.4, yy = y + (rand() - 0.5) * sp * 0.4;
+        if (xx * xx + yy * yy < R * R * 0.97 && rand() < tone) top.dot([s.x + xx, s.y + yy, z1]);
+      }
+    }
+    body += top.svg();
+    outline += `<ellipse cx="${f2(t[0])}" cy="${f2(t[1])}" rx="${f2(rx)}" ry="${f2(ry)}" fill="none"/>`;
+  }
+  const pts = [[b[0] - rx, b[1] + ry], [b[0] + rx, b[1] + ry], [t[0] - rx, t[1] - ry], [t[0] + rx, t[1] - ry]];
+  return { body: body + strokeGroup(s, outline), pts };
+}
+
+function renderSphere(s, defs) {
+  const R = s.r, C = shapeCenter(s), c = P(C), rad = R * cam.k, tex = Tex(s);
+  let fill = s.fill;
+  if (s.lit) {
+    // Radial gradient focused on the highlight, sampled exactly along the highlight → far-rim line.
+    let hx = dot(cam.L, cam.r), hy = -dot(cam.L, cam.u);
+    const hl = Math.hypot(hx, hy);
+    if (dot(cam.L, cam.c) < 0 && hl > 1e-6) { hx /= hl; hy /= hl; }
+    const hm = Math.hypot(hx, hy), ex = hm > 1e-6 ? -hx / hm : 0, ey = hm > 1e-6 ? -hy / hm : 1;
+    const f = Math.min(0.92, hm) / Math.max(hm, 1e-6);
+    const fx = hx * f, fy = hy * f, id = `sph${s.id}`;
+    let stops = '';
+    for (let i = 0; i <= 16; i++) {
+      const q = i / 16, qx = fx + (ex - fx) * q, qy = fy + (ey - fy) * q;
+      const qz = Math.sqrt(Math.max(0, 1 - qx * qx - qy * qy));
+      const n = add(add(mul(cam.r, qx), mul(cam.u, -qy)), mul(cam.c, qz));
+      stops += `<stop offset="${f2(q * 100)}%" stop-color="${shade(s, n)}"/>`;
+    }
+    defs.push(`<radialGradient id="${id}" gradientUnits="userSpaceOnUse" cx="${f2(c[0])}" cy="${f2(c[1])}" r="${f2(rad)}" fx="${f2(c[0] + fx * rad)}" fy="${f2(c[1] + fy * rad)}">${stops}</radialGradient>`);
+    fill = `url(#${id})`;
+  }
+  const circle = `cx="${f2(c[0])}" cy="${f2(c[1])}" r="${f2(rad)}"`;
+  let body = `<circle ${circle} fill="${fill}"/>`;
+  const vis = (n) => dot(n, cam.c) > 0.02;
+  const SEG = 48;
+  const ringSegs = (pt, cross) => {
+    for (let i = 0; i < SEG; i++) {
+      const a = pt(i / SEG), b = pt((i + 1) / SEG), n = mul(add(a, b), 0.5 / R), nl = len(n);
+      const nn = mul(n, 1 / nl);
+      if (vis(nn)) tex.seg(add(C, a), add(C, b), curveWidth(s, texTone(s, nn), cross));
+    }
+  };
+  if (s.texture === 'hatch' || s.texture === 'cross') {
+    for (let z = -R + s.spacing / 2; z < R; z += s.spacing) {
+      const rho = Math.sqrt(R * R - z * z);
+      ringSegs((u) => [rho * Math.cos(u * 2 * Math.PI), rho * Math.sin(u * 2 * Math.PI), z], false);
+    }
+    if (s.texture === 'cross') {
+      const step = s.spacing / R;
+      for (let m = 0; m < Math.PI; m += step) {
+        ringSegs((u) => { const v = u * 2 * Math.PI; return [R * Math.cos(v) * Math.cos(m), R * Math.cos(v) * Math.sin(m), R * Math.sin(v)]; }, true);
+      }
+    }
+  } else if (s.texture === 'stipple') {
+    const N = Math.min(MAX_DOTS, Math.round((4 * Math.PI * R * R) / (s.spacing * s.spacing)));
+    const rand = mulberry32(s.id * 7919 + 3), golden = Math.PI * (3 - Math.sqrt(5));
+    for (let i = 0; i < N; i++) {
+      const y = 1 - (2 * (i + 0.5)) / N, rr = Math.sqrt(1 - y * y), th = golden * i;
+      const n = [Math.cos(th) * rr, Math.sin(th) * rr, y], keep = rand();
+      if (vis(n) && keep < texTone(s, n)) tex.dot(add(C, mul(n, R)));
+    }
+  }
+  body += tex.svg() + strokeGroup(s, `<circle ${circle} fill="none"/>`);
+  return { body, pts: [[c[0] - rad, c[1] - rad], [c[0] + rad, c[1] + rad]] };
+}
+
+const strokeGroup = (s, inner) =>
+  s.strokeWidth > 0 && inner ? `<g stroke="${s.stroke}" stroke-width="${s.strokeWidth}" stroke-linejoin="round">${inner}</g>` : '';
+
+// Ground shadow: hull of the shape's points projected along the light onto z = 0.
+function castShadow(s) {
+  const L = cam.L;
+  if (L[2] < 0.05) return '';
+  let pts = [];
+  if (s.type === 'cube') pts = boxCorners(s);
+  else if (s.type === 'cylinder') {
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * 2 * Math.PI, x = s.x + s.r * Math.cos(a), y = s.y + s.r * Math.sin(a);
+      pts.push([x, y, s.z], [x, y, s.z + s.h]);
+    }
+  } else {
+    const C = shapeCenter(s);
+    for (let i = 0; i < 64; i++) {
+      const a = (i / 64) * 2 * Math.PI;
+      // Silhouette from the light: circle perpendicular to L.
+      const t1 = cross(L, [0, 0, 1]), t1n = mul(t1, 1 / (len(t1) || 1)), t2 = cross(L, t1n);
+      pts.push(add(C, add(mul(t1n, s.r * Math.cos(a)), mul(t2, s.r * Math.sin(a)))));
+    }
+  }
+  const ground = pts.map((p) => [p[0] - (L[0] * p[2]) / L[2], p[1] - (L[1] * p[2]) / L[2]]);
+  const h = hull(ground);
+  if (h.length < 3) return '';
+  return `<polygon points="${h.map((g) => P([g[0], g[1], 0]).map(f2).join(',')).join(' ')}"/>`;
+}
+
+function renderGrid() {
+  const g = state.bg;
+  if (!g.grid || g.gridStep <= 0) return '';
+  let x0 = -60, x1 = 60, y0 = -60, y1 = 60;
+  if (cam.se > 0.05) {
+    const cs = [[0, 0], [SIZE, 0], [0, SIZE], [SIZE, SIZE]].map(([a, b]) => toGround(a, b));
+    x0 = Math.min(...cs.map((c) => c[0])); x1 = Math.max(...cs.map((c) => c[0]));
+    y0 = Math.min(...cs.map((c) => c[1])); y1 = Math.max(...cs.map((c) => c[1]));
+  }
+  const clamp = (v) => Math.max(-300, Math.min(300, v));
+  [x0, x1, y0, y1] = [x0, x1, y0, y1].map(clamp);
+  const st = g.gridStep;
+  if ((x1 - x0) / st > 600 || (y1 - y0) / st > 600) return '';
+  let d = '';
+  const ln = (a, b) => { const A = P(a), B = P(b); d += `M${f2(A[0])} ${f2(A[1])}L${f2(B[0])} ${f2(B[1])}`; };
+  for (let x = Math.floor(x0 / st) * st; x <= x1; x += st) ln([x, y0, 0], [x, y1, 0]);
+  for (let y = Math.floor(y0 / st) * st; y <= y1; y += st) ln([x0, y, 0], [x1, y, 0]);
+  if (g.diagonals) {
+    for (let k = Math.floor((x0 + y0) / st) * st; k <= x1 + y1; k += st) ln([k - y0, y0, 0], [k - y1, y1, 0]);
+  }
+  return `<path d="${d}" fill="none" stroke="${g.gridColor}" stroke-width="${g.gridWidth}"/>`;
+}
+
+// Inner SVG markup for the whole scene. `overlay` adds the selection box (preview only).
+function sceneMarkup(overlay) {
+  cam = camera();
+  const defs = [];
+  let out = '';
+  if (!state.bg.transparent) out += `<rect width="${SIZE}" height="${SIZE}" fill="${state.bg.color}"/>`;
+  out += renderGrid();
+  if (state.light.cast) {
+    const sh = state.shapes.map(castShadow).join('');
+    if (sh) out += `<g fill="${state.light.shadow}" opacity="${state.light.castOpacity}">${sh}</g>`;
+  }
+  const order = state.shapes.slice().sort((a, b) => dot(shapeCenter(a), cam.c) - dot(shapeCenter(b), cam.c));
+  let sel = null;
+  for (const s of order) {
+    const r = s.type === 'cube' ? renderCube(s) : s.type === 'cylinder' ? renderCylinder(s, defs) : renderSphere(s, defs);
+    out += `<g data-id="${s.id}">${r.body}</g>`;
+    if (s.id === state.selected) sel = r.pts;
+  }
+  if (overlay && sel) {
+    const xs = sel.map((p) => p[0]), ys = sel.map((p) => p[1]), pad = 8;
+    const x = Math.min(...xs) - pad, y = Math.min(...ys) - pad;
+    out += `<rect x="${f2(x)}" y="${f2(y)}" width="${f2(Math.max(...xs) - x + pad)}" height="${f2(Math.max(...ys) - y + pad)}" fill="none" stroke="#2f6fe4" stroke-width="1.5" stroke-dasharray="5 4" rx="4" pointer-events="none"/>`;
+  }
+  return (defs.length ? `<defs>${defs.join('')}</defs>` : '') + out;
+}
+
+const exportSvg = (px = SIZE) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${SIZE} ${SIZE}" width="${px}" height="${px}">${sceneMarkup(false)}</svg>`;
+
+/* ---------- preview ---------- */
+const scene = $('scene');
+let frame = 0;
+function render() {
+  if (frame) return;
+  frame = requestAnimationFrame(() => { frame = 0; scene.innerHTML = sceneMarkup(true); });
+}
+
+/* ---------- controls ---------- */
+const el = (tag, props = {}) => Object.assign(document.createElement(tag), props);
+let fieldSeq = 0;
+
+// One labelled control bound to obj[f.k]. Ranges get a paired number box for exact values.
+function field(obj, f, onChange) {
+  const row = el('div', { className: 'row' }), id = `f${++fieldSeq}`;
+  row.append(el('label', { textContent: f.label, htmlFor: id }));
+  const commit = (v) => { obj[f.k] = v; onChange(f.k); };
+  if (f.type === 'range') {
+    const range = el('input', { type: 'range', id, min: f.min, max: f.max, step: f.step, value: obj[f.k] });
+    const num = el('input', { type: 'number', min: f.min, max: f.max, step: f.step, value: f2(obj[f.k]) });
+    num.setAttribute('aria-label', f.label);
+    range.addEventListener('input', () => { num.value = f2(+range.value); commit(+range.value); });
+    num.addEventListener('input', () => { if (num.value !== '' && !isNaN(+num.value)) { range.value = num.value; commit(+num.value); } });
+    row.append(range, num);
+  } else if (f.type === 'color') {
+    const input = el('input', { type: 'color', id, value: obj[f.k], className: 'wide' });
+    input.addEventListener('input', () => commit(input.value));
+    row.append(input);
+  } else if (f.type === 'check') {
+    const input = el('input', { type: 'checkbox', id, checked: !!obj[f.k] });
+    input.addEventListener('change', () => commit(input.checked));
+    row.append(input);
+  } else if (f.type === 'select') {
+    const input = el('select', { id, className: 'wide' });
+    for (const [v, label] of f.options) input.append(el('option', { value: v, textContent: label }));
+    input.value = String(obj[f.k]);
+    input.addEventListener('change', () => commit(f.numeric ? +input.value : input.value));
+    row.append(input);
+  }
+  return row;
+}
+const fill = (container, obj, specs, onChange) => {
+  container.replaceChildren(...specs.map((f) => field(obj, f, onChange)));
+};
+
+const changed = () => { render(); save(); };
+
+function buildView() {
+  fill($('viewFields'), state.view, [
+    { k: 'preset', label: 'Projection', type: 'select', options: Object.entries(PRESETS).map(([k, p]) => [k, p.label]) },
+    { k: 'az', label: 'Rotation', type: 'range', min: 0, max: 360, step: 1 },
+    { k: 'el', label: 'Elevation', type: 'range', min: 0, max: 90, step: 0.5 },
+    { k: 'zoom', label: 'Zoom', type: 'range', min: 8, max: 200, step: 1 }
+  ], (k) => {
+    const v = state.view;
+    if (k === 'preset' && v.preset !== 'custom') { v.az = PRESETS[v.preset].az; v.el = PRESETS[v.preset].el; buildView(); }
+    if (k === 'az' || k === 'el') {
+      const match = Object.entries(PRESETS).find(([, p]) => p.az === v.az && p.el === v.el);
+      const preset = match ? match[0] : 'custom';
+      if (preset !== v.preset) { v.preset = preset; $('viewFields').querySelector('select').value = preset; }
+    }
+    changed();
+  });
+}
+
+function buildLight() {
+  fill($('lightFields'), state.light, [
+    { k: 'az', label: 'Light angle', type: 'range', min: -180, max: 180, step: 1 },
+    { k: 'el', label: 'Light height', type: 'range', min: 5, max: 90, step: 1 },
+    { k: 'ambient', label: 'Ambient', type: 'range', min: 0, max: 1, step: 0.01 },
+    { k: 'strength', label: 'Shade depth', type: 'range', min: 0, max: 1, step: 0.01 },
+    { k: 'shadow', label: 'Shadow colour', type: 'color' },
+    { k: 'bands', label: 'Tone steps', type: 'select', numeric: true, options: [[0, 'Smooth'], [2, '2'], [3, '3'], [4, '4'], [5, '5'], [6, '6']] },
+    { k: 'cast', label: 'Cast shadows', type: 'check' },
+    { k: 'castOpacity', label: 'Shadow alpha', type: 'range', min: 0, max: 1, step: 0.01 }
+  ], changed);
+}
+
+function buildBg() {
+  fill($('bgFields'), state.bg, [
+    { k: 'color', label: 'Colour', type: 'color' },
+    { k: 'transparent', label: 'Transparent', type: 'check' },
+    { k: 'grid', label: 'Grid', type: 'check' },
+    { k: 'gridColor', label: 'Grid colour', type: 'color' },
+    { k: 'gridWidth', label: 'Grid weight', type: 'range', min: 0.25, max: 4, step: 0.25 },
+    { k: 'gridStep', label: 'Grid size', type: 'range', min: 0.25, max: 4, step: 0.25 },
+    { k: 'diagonals', label: 'Triangular', type: 'check' }
+  ], changed);
+}
+
+const TYPE_LABEL = { cube: 'Cube', cylinder: 'Cylinder', sphere: 'Sphere' };
+const selectedShape = () => state.shapes.find((s) => s.id === state.selected);
+
+function buildList() {
+  const list = $('shapeList');
+  list.replaceChildren(...state.shapes.map((s, i) => {
+    const b = el('button', { className: 'shape-item' + (s.id === state.selected ? ' sel' : '') });
+    b.append(el('span', { className: 'swatch', style: `background:${s.fill}` }), el('span', { textContent: `${TYPE_LABEL[s.type]} ${i + 1}` }),
+      el('span', { className: 'meta', textContent: s.texture === 'none' ? (s.lit ? 'shaded' : 'flat') : s.texture }));
+    b.addEventListener('click', () => select(s.id));
+    return b;
+  }));
+  if (!state.shapes.length) list.append(el('p', { className: 'empty', textContent: 'No shapes yet.' }));
+  $('dupShape').disabled = $('delShape').disabled = !selectedShape();
+}
+
+function buildShape() {
+  const s = selectedShape(), box = $('shapeFields');
+  $('shapeTitle').textContent = s ? `${TYPE_LABEL[s.type]} ${state.shapes.indexOf(s) + 1}` : 'Selected shape';
+  if (!s) { box.replaceChildren(el('p', { className: 'empty', textContent: 'Select a shape to edit it.' })); return; }
+  const pos = [
+    { k: 'x', label: 'X', type: 'range', min: -12, max: 12, step: 0.05 },
+    { k: 'y', label: 'Y', type: 'range', min: -12, max: 12, step: 0.05 },
+    { k: 'z', label: 'Lift', type: 'range', min: 0, max: 8, step: 0.05 }
+  ];
+  const dims = s.type === 'cube' ? [
+    { k: 'w', label: 'Width', type: 'range', min: 0.1, max: 8, step: 0.05 },
+    { k: 'd', label: 'Depth', type: 'range', min: 0.1, max: 8, step: 0.05 },
+    { k: 'h', label: 'Height', type: 'range', min: 0, max: 8, step: 0.05 },
+    { k: 'rot', label: 'Rotate', type: 'range', min: -90, max: 90, step: 1 }
+  ] : s.type === 'cylinder' ? [
+    { k: 'r', label: 'Radius', type: 'range', min: 0.1, max: 5, step: 0.05 },
+    { k: 'h', label: 'Height', type: 'range', min: 0, max: 8, step: 0.05 }
+  ] : [{ k: 'r', label: 'Radius', type: 'range', min: 0.1, max: 5, step: 0.05 }];
+  const look = [
+    { k: 'fill', label: 'Fill', type: 'color' },
+    { k: 'lit', label: 'Shaded', type: 'check' },
+    { k: 'stroke', label: 'Outline', type: 'color' },
+    { k: 'strokeWidth', label: 'Outline weight', type: 'range', min: 0, max: 6, step: 0.1 }
+  ];
+  const texture = [
+    { k: 'texture', label: 'Texture', type: 'select', options: [['none', 'None'], ['hatch', 'Hatching'], ['cross', 'Cross-hatching'], ['stipple', 'Stipple']] },
+    { k: 'texColor', label: 'Ink colour', type: 'color' },
+    { k: 'spacing', label: 'Spacing', type: 'range', min: 0.04, max: 0.6, step: 0.01 },
+    { k: 'texWeight', label: 'Line / dot', type: 'range', min: 0.2, max: 4, step: 0.05 },
+    { k: 'texFloor', label: 'Min density', type: 'range', min: 0, max: 1, step: 0.01 },
+    { k: 'hatchAngle', label: 'Hatch angle', type: 'range', min: 0, max: 180, step: 1 }
+  ];
+  const onChange = (k) => { if (k === 'fill' || k === 'texture' || k === 'lit') buildList(); changed(); };
+  box.replaceChildren();
+  const group = (title, specs) => {
+    box.append(el('div', { className: 'subhead', textContent: title }));
+    specs.forEach((f) => box.append(field(s, f, onChange)));
+  };
+  group('Position', pos);
+  group('Size', dims);
+  group('Appearance', look);
+  group('Texture', texture);
+}
+
+function select(id) {
+  state.selected = id;
+  buildList(); buildShape(); changed();
+}
+
+let nextId = Math.max(0, ...state.shapes.map((s) => s.id)) + 1;
+function addShape(type) {
+  // Drop new shapes at the ground point under the canvas centre.
+  cam = camera();
+  const g = cam.se > 0.05 ? toGround(SIZE / 2, SIZE / 2) : [0, 0];
+  const snap = (v) => (state.snap ? Math.round(v / state.snap) * state.snap : f2(v));
+  const s = { ...SHAPE_BASE, id: nextId++, type, x: snap(g[0]), y: snap(g[1]) };
+  state.shapes.push(s);
+  select(s.id);
+}
+
+document.querySelectorAll('[data-add]').forEach((b) => b.addEventListener('click', () => addShape(b.dataset.add)));
+$('dupShape').addEventListener('click', () => {
+  const s = selectedShape();
+  if (!s) return;
+  const copy = { ...s, id: nextId++, x: s.x + 1, y: s.y + 1 };
+  state.shapes.push(copy);
+  select(copy.id);
+});
+function deleteSelected() {
+  const i = state.shapes.findIndex((s) => s.id === state.selected);
+  if (i < 0) return;
+  state.shapes.splice(i, 1);
+  select(state.shapes[Math.min(i, state.shapes.length - 1)]?.id ?? null);
+}
+$('delShape').addEventListener('click', deleteSelected);
+$('centerView').addEventListener('click', () => { state.view.panX = 0; state.view.panY = 0; changed(); });
+$('resetAll').addEventListener('click', () => {
+  state = defaults();
+  nextId = Math.max(...state.shapes.map((s) => s.id)) + 1;
+  buildAll(); changed();
+});
+
+addEventListener('keydown', (e) => {
+  if (e.target.closest('input, select, textarea')) return;
+  if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShape()) { e.preventDefault(); deleteSelected(); }
+});
+
+/* ---------- drag to move / pan ---------- */
+let drag = null;
+const toView = (e) => { const b = scene.getBoundingClientRect(); return [((e.clientX - b.left) / b.width) * SIZE, ((e.clientY - b.top) / b.height) * SIZE]; };
+
+scene.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  const hit = e.target.closest('[data-id]');
+  const start = toView(e);
+  if (hit) {
+    const s = state.shapes.find((x) => x.id === +hit.dataset.id);
+    if (state.selected !== s.id) { state.selected = s.id; buildList(); buildShape(); }
+    drag = { kind: 'shape', s, start, x: s.x, y: s.y };
+  } else {
+    drag = { kind: 'pan', start, panX: state.view.panX, panY: state.view.panY };
+  }
+  scene.setPointerCapture(e.pointerId);
+  scene.classList.add('dragging');
+  render();
+});
+scene.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  const [x, y] = toView(e), dx = x - drag.start[0], dy = y - drag.start[1];
+  if (drag.kind === 'pan') {
+    state.view.panX = drag.panX + dx;
+    state.view.panY = drag.panY + dy;
+  } else {
+    cam = camera();
+    if (cam.se < 0.05) return; // edge-on: ground motion is undefined
+    // Screen delta → ground delta (the camera origin cancels out).
+    const g = toGround(cam.ox + dx, cam.oy + dy);
+    const snap = (v) => (state.snap ? Math.round(v / state.snap) * state.snap : f2(v));
+    drag.s.x = snap(drag.x + g[0]);
+    drag.s.y = snap(drag.y + g[1]);
+  }
+  render();
+});
+const endDrag = () => {
+  if (!drag) return;
+  if (drag.kind === 'shape') buildShape();
+  drag = null;
+  scene.classList.remove('dragging');
+  save();
+};
+scene.addEventListener('pointerup', endDrag);
+scene.addEventListener('pointercancel', endDrag);
+
+/* ---------- export ---------- */
+function download(blob, name) {
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('dlSvg').addEventListener('click', () => download(new Blob([exportSvg()], { type: 'image/svg+xml' }), 'iso-shapes.svg'));
+$('copySvg').addEventListener('click', async (e) => {
+  const b = e.currentTarget;
+  try { await navigator.clipboard.writeText(exportSvg()); b.textContent = 'Copied'; } catch { b.textContent = 'Copy failed'; }
+  setTimeout(() => (b.textContent = 'Copy SVG'), 1200);
+});
+$('dlPng').addEventListener('click', async () => {
+  const px = +$('pngSize').value;
+  const url = URL.createObjectURL(new Blob([exportSvg(px)], { type: 'image/svg+xml' }));
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const canvas = el('canvas', { width: px, height: px });
+    canvas.getContext('2d').drawImage(img, 0, 0, px, px);
+    const png = await new Promise((r) => canvas.toBlob(r, 'image/png'));
+    if (png) download(png, `iso-shapes-${px}.png`);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+});
+
+function buildAll() {
+  buildView(); buildLight(); buildBg(); buildList(); buildShape();
+  fill($('snapField'), state, [
+    { k: 'snap', label: 'Snap to', type: 'select', numeric: true, options: [[0, 'Off'], [0.25, '¼ unit'], [0.5, '½ unit'], [1, '1 unit']] }
+  ], save);
+}
+buildAll();
+render();
+</script>
+</body>
+</html>
